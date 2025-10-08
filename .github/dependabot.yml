@@ -1,0 +1,53 @@
+version: 2
+updates:
+  # npm dependencies - grouped and controlled
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "03:00"
+      timezone: "Europe/Berlin"
+    # Group updates to reduce PR spam
+    groups:
+      production-dependencies:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "@types/*"
+          - "eslint*"
+          - "jest*"
+          - "ts-*"
+          - "typescript"
+      development-dependencies:
+        patterns:
+          - "@types/*"
+          - "eslint*"
+          - "jest*"
+          - "ts-*"
+          - "typescript"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "automated"
+    # Only create PRs for security updates immediately
+    # Regular updates wait for scheduled time
+
+  # GitHub Actions - less frequent updates
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+      day: "monday"
+      time: "03:00"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    open-pull-requests-limit: 1
+    labels:
+      - "github-actions"
+      - "dependencies"
