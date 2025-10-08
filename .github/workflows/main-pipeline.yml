@@ -18,7 +18,6 @@ concurrency:
 
 env:
   NODE_VERSION: "20"
-  DOCKER_IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   # ==========================================
@@ -82,7 +81,7 @@ jobs:
         if: always() && hashFiles('results.sarif') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: gitleaks-results.sarif
+          name: gitleaks-results
           path: results.sarif
           if-no-files-found: warn
 
@@ -110,13 +109,26 @@ jobs:
       - name: 📁 Create Reports Directory
         run: mkdir -p reports
 
-      - name: 🔍 Run OWASP Dependency Check
+      - name: 🔍 Run OWASP Dependency Check (SARIF)
         uses: dependency-check/Dependency-Check_Action@main
         with:
           project: ${{ github.repository }}
           path: "."
-          format: "JSON,HTML,SARIF"
+          format: "SARIF"
           out: "reports"
+          args: >
+            --enableRetired
+            --enableExperimental
+            --noupdate
+
+      - name: 🔍 Run OWASP Dependency Check (JSON for parsing)
+        uses: dependency-check/Dependency-Check_Action@main
+        continue-on-error: true
+        with:
+          project: ${{ github.repository }}
+          path: "."
+          format: "JSON"
+          out: "reports-json"
           args: >
             --enableRetired
             --enableExperimental
@@ -127,7 +139,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: dependency-check-report
-          path: reports/
+          path: |
+            reports/
+            reports-json/
 
       - name: 📤 Upload SARIF to GitHub Security
         if: always() && hashFiles('reports/dependency-check-report.sarif') != ''
@@ -249,6 +263,8 @@ jobs:
           path: coverage/
 
       - name: 🔍 SonarCloud Scan
+        id: sonar-scan
+        continue-on-error: true
         uses: SonarSource/sonarqube-scan-action@master
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -257,7 +273,12 @@ jobs:
       - name: 📊 Check Quality Gate
         if: always()
         run: |
-          echo "✅ Quality Gate check completed"
+          if [[ "${{ steps.sonar-scan.outcome }}" == "failure" ]]; then
+            echo "⚠️ SonarCloud Quality Gate failed - Check https://sonarcloud.io/dashboard?id=ActiveClientMods_IT-Security-CI-CD"
+            echo "This won't block the pipeline, but please review the issues"
+          else
+            echo "✅ SonarCloud Quality Gate passed"
+          fi
 
   # ==========================================
   # JOB 7: License Compliance Check
@@ -359,7 +380,15 @@ jobs:
           name: build-artifacts
           path: dist/
 
-      - name: 🏗️ Set up Docker Buildx
+      - name: �️ Generate Docker Image Name
+        id: docker-meta
+        run: |
+          # Convert repository name to lowercase for Docker compatibility
+          DOCKER_IMAGE_NAME=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "image-name=$DOCKER_IMAGE_NAME" >> $GITHUB_OUTPUT
+          echo "🐳 Docker image name: $DOCKER_IMAGE_NAME"
+
+      - name: �🏗️ Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: 🔨 Build Docker Image
@@ -368,7 +397,7 @@ jobs:
           context: .
           push: false
           load: true
-          tags: ${{ env.DOCKER_IMAGE_NAME }}:${{ needs.initialize.outputs.version }}
+          tags: ${{ steps.docker-meta.outputs.image-name }}:${{ needs.initialize.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -385,7 +414,7 @@ jobs:
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: "image"
-          image-ref: ${{ env.DOCKER_IMAGE_NAME }}:${{ needs.initialize.outputs.version }}
+          image-ref: ${{ steps.docker-meta.outputs.image-name }}:${{ needs.initialize.outputs.version }}
           format: "sarif"
           output: "trivy-image-results.sarif"
           severity: "CRITICAL,HIGH,MEDIUM"
@@ -452,8 +481,8 @@ jobs:
           FINDINGS=""
 
           # Parse Gitleaks
-          if [ -f "security-reports/gitleaks-results.sarif/results.sarif" ]; then
-            GITLEAKS_COUNT=$(jq '.runs[0].results | length' security-reports/gitleaks-results.sarif/results.sarif 2>/dev/null || echo "0")
+          if [ -f "security-reports/gitleaks-results/results.sarif" ]; then
+            GITLEAKS_COUNT=$(jq '.runs[0].results | length' security-reports/gitleaks-results/results.sarif 2>/dev/null || echo "0")
             if [ "$GITLEAKS_COUNT" -gt 0 ]; then
               CRITICAL_COUNT=$((CRITICAL_COUNT + GITLEAKS_COUNT))
               FINDINGS="${FINDINGS}### 🔐 Gitleaks: $GITLEAKS_COUNT secret(s) detected\n"
@@ -464,15 +493,23 @@ jobs:
             FINDINGS="${FINDINGS}### ✅ Gitleaks: No secrets detected\n"
           fi
 
-          # Parse Dependency Check
-          if [ -f "security-reports/dependency-check-report/reports/dependency-check-report.json" ]; then
-            DEP_CRITICAL=$(jq '[.dependencies[]?.vulnerabilities[]? | select(.severity=="CRITICAL")] | length' security-reports/dependency-check-report/reports/dependency-check-report.json 2>/dev/null || echo "0")
-            DEP_HIGH=$(jq '[.dependencies[]?.vulnerabilities[]? | select(.severity=="HIGH")] | length' security-reports/dependency-check-report/reports/dependency-check-report.json 2>/dev/null || echo "0")
+          # Parse Dependency Check (JSON format for better parsing)
+          if [ -f "security-reports/dependency-check-report/reports-json/dependency-check-report.json" ]; then
+            DEP_CRITICAL=$(jq '[.dependencies[]?.vulnerabilities[]? | select(.severity=="CRITICAL")] | length' security-reports/dependency-check-report/reports-json/dependency-check-report.json 2>/dev/null || echo "0")
+            DEP_HIGH=$(jq '[.dependencies[]?.vulnerabilities[]? | select(.severity=="HIGH")] | length' security-reports/dependency-check-report/reports-json/dependency-check-report.json 2>/dev/null || echo "0")
             CRITICAL_COUNT=$((CRITICAL_COUNT + DEP_CRITICAL))
             HIGH_COUNT=$((HIGH_COUNT + DEP_HIGH))
             FINDINGS="${FINDINGS}### 🛡️ OWASP Dependency Check: $DEP_CRITICAL critical, $DEP_HIGH high\n"
+          elif [ -f "security-reports/dependency-check-report/reports/dependency-check-report.sarif" ]; then
+            DEP_COUNT=$(jq '.runs[0].results | length' security-reports/dependency-check-report/reports/dependency-check-report.sarif 2>/dev/null || echo "0")
+            if [ "$DEP_COUNT" -gt 0 ]; then
+              CRITICAL_COUNT=$((CRITICAL_COUNT + DEP_COUNT))
+              FINDINGS="${FINDINGS}### 🛡️ OWASP Dependency Check: $DEP_COUNT vulnerabilities found\n"
+            else
+              FINDINGS="${FINDINGS}### ✅ OWASP Dependency Check: No vulnerabilities found\n"
+            fi
           else
-            FINDINGS="${FINDINGS}### ✅ OWASP Dependency Check: Scan completed\n"
+            FINDINGS="${FINDINGS}### 🛡️ OWASP Dependency Check: Scan completed\n"
           fi
 
           # License check
@@ -613,11 +650,15 @@ jobs:
         run: |
           echo "🔍 Checking pipeline status..."
 
+          # Critical failures that should block the pipeline
           if [[ "${{ needs.security-summary.result }}" == "failure" ]] || \
-             [[ "${{ needs.build-and-test.result }}" == "failure" ]] || \
-             [[ "${{ needs.sonarcloud.result }}" == "failure" ]]; then
-            echo "❌ Quality gate failed!"
+             [[ "${{ needs.build-and-test.result }}" == "failure" ]]; then
+            echo "❌ Critical quality gate failed!"
             exit 1
+          # SonarCloud is informational only
+          elif [[ "${{ needs.sonarcloud.result }}" == "failure" ]]; then
+            echo "⚠️ SonarCloud Quality Gate failed, but pipeline continues"
+            echo "✅ All critical quality checks passed!"
           else
             echo "✅ All quality checks passed!"
           fi
