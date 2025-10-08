@@ -290,13 +290,7 @@ jobs:
       - name: 📥 Checkout Code
         uses: actions/checkout@v4
 
-      - name: 💎 Setup Ruby (for license_finder)
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: "3.2"
-          bundler-cache: false
-
-      - name: 🟢 Setup Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -304,14 +298,32 @@ jobs:
       - name: 📦 Install Dependencies
         run: npm ci
 
-      - name: 🔧 Install License Finder
-        run: gem install license_finder
+      - name: 🔧 Install License Checker
+        run: npm install -g license-checker
 
-      - name: 🔍 Run License Finder
+      - name: 🔍 Run License Check (Fast)
         run: |
-          license_finder report --format json > license-report.json || true
-          license_finder report --format html > license-report.html || true
-          license_finder || echo "⚠️ License issues detected"
+          # Generate license reports quickly using npm license-checker
+          echo "🔍 Generating license reports..."
+
+          # JSON format for processing
+          license-checker --json --out license-report.json || true
+
+          # CSV format for easy reading
+          license-checker --csv --out license-report.csv || true
+
+          # Summary report
+          license-checker --summary > license-summary.txt || true
+
+          # Check for problematic licenses (non-blocking)
+          echo "🔍 Checking for potentially problematic licenses..."
+          if license-checker --failOn 'GPL;AGPL;LGPL;CPAL;OSL' --onlyAllow 'MIT;Apache-2.0;BSD;ISC;CC0;Unlicense;WTFPL' 2>/dev/null; then
+            echo "✅ All licenses are approved"
+          else
+            echo "⚠️ Some licenses may need review - check license-report.json for details"
+          fi
+
+          echo "📊 License scan completed in $(date)"
 
       - name: 📊 Upload License Reports
         if: always()
@@ -320,7 +332,8 @@ jobs:
           name: license-reports
           path: |
             license-report.json
-            license-report.html
+            license-report.csv
+            license-summary.txt
 
   # ==========================================
   # JOB 8: IaC Scanning with Checkov
