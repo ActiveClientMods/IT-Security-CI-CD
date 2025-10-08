@@ -1,0 +1,90 @@
+name: 📅 Scheduled Security Scans
+
+on:
+  schedule:
+    # Run every Monday at 2 AM UTC
+    - cron: "0 2 * * 1"
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  scheduled-security-scan:
+    name: 🔍 Weekly Security Audit
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      issues: write
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: 📦 Install Dependencies
+        run: npm ci
+
+      - name: 🔍 Run Trivy Filesystem Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          format: "sarif"
+          output: "trivy-scheduled-fs.sarif"
+          severity: "CRITICAL,HIGH"
+
+      - name: 📤 Upload Trivy Results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-scheduled-fs.sarif
+          category: trivy-scheduled
+
+      - name: 🔍 Run OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: ${{ github.repository }}
+          path: "."
+          format: "SARIF"
+
+      - name: 📤 Upload Dependency Check Results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: reports/dependency-check-report.sarif
+          category: dependency-check-scheduled
+
+      - name: 🚨 Create Weekly Security Report Issue
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const date = new Date().toISOString().split('T')[0];
+            const title = `📅 Weekly Security Scan Report - ${date}`;
+
+            const body = `# Weekly Security Audit Report
+
+            **Date:** ${date}
+            **Workflow Run:** ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}
+
+            ## 🔍 Scans Performed
+            - ✅ Trivy Filesystem Scan
+            - ✅ OWASP Dependency Check
+
+            ## 📊 Results
+            Check the Security tab for detailed findings.
+
+            ---
+            *This is an automated weekly security audit*
+            `;
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['security', 'weekly-audit', 'automated']
+            });

@@ -1,14 +1,10 @@
-import app from "./app";
+import dotenv from "dotenv";
+import Server from "./server";
 
-const PORT = process.env.PORT || 3000;
+// Load environment variables
+dotenv.config();
 
-// Hardcoded secret (Gitleaks will catch this)
-const API_KEY = "ghp_1234567890abcdefghijklmnopqrstuvwxyz";
-const DB_PASSWORD = "SuperSecret123!";
+const PORT = parseInt(process.env.PORT || "3000", 10);
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`API Key: ${API_KEY}`); // Security issue: logging secrets
-});
-
-export default app;
+const server = new Server(PORT);
+server.start();

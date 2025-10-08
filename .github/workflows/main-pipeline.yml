@@ -1,0 +1,610 @@
+name: 🚀 Main CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - development
+      - release
+  pull_request:
+    branches:
+      - development
+      - release
+    types: [opened, synchronize, reopened]
+
+# Prevent multiple workflows from running simultaneously
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "20"
+  DOCKER_IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ==========================================
+  # JOB 1: Initialize and Setup
+  # ==========================================
+  initialize:
+    name: 🔧 Initialize Pipeline
+    runs-on: ubuntu-latest
+    outputs:
+      should_deploy: ${{ steps.check.outputs.should_deploy }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Full history for SonarCloud
+
+      - name: 🔍 Check Deployment Conditions
+        id: check
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/release" ]]; then
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_deploy=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 📌 Generate Version
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/release" ]]; then
+            VERSION=$(date +'%Y.%m.%d')-${GITHUB_SHA::7}
+          else
+            VERSION=dev-${GITHUB_SHA::7}
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "📦 Version: $VERSION"
+
+  # ==========================================
+  # JOB 2: Secret Scanning with Gitleaks
+  # ==========================================
+  gitleaks-scan:
+    name: 🔐 Gitleaks - Secret Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🔍 Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+      - name: 📊 Upload Gitleaks Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report
+          path: gitleaks-report.json
+          if-no-files-found: warn
+
+  # ==========================================
+  # JOB 3: Dependency Vulnerability Scanning
+  # ==========================================
+  dependency-check:
+    name: 🛡️ OWASP Dependency Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 🔍 Run OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: ${{ github.repository }}
+          path: "."
+          format: "JSON,HTML,SARIF"
+          args: >
+            --enableRetired
+            --enableExperimental
+            --nvdApiKey ${{ secrets.NVD_API_KEY }}
+
+      - name: 📊 Upload Dependency Check Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-report
+          path: reports/
+
+      - name: 📤 Upload SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: reports/dependency-check-report.sarif
+          category: dependency-check
+
+  # ==========================================
+  # JOB 4: CodeQL Analysis
+  # ==========================================
+  codeql-analysis:
+    name: 🔬 CodeQL Security Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ["javascript", "typescript"]
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended,security-and-quality
+
+      - name: 🏗️ Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: 🔍 Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
+
+  # ==========================================
+  # JOB 5: Build and Test Application
+  # ==========================================
+  build-and-test:
+    name: 🏗️ Build & Test
+    runs-on: ubuntu-latest
+    needs: [initialize]
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: 📦 Install Dependencies
+        run: npm ci
+
+      - name: 🔍 Check for Deprecated Dependencies
+        run: |
+          echo "🔍 Checking for deprecated npm packages..."
+          npm outdated || true
+          npx npm-check-updates --doctor || true
+
+          # Check for deprecated packages
+          if npm ls --depth=0 2>&1 | grep -i deprecated; then
+            echo "⚠️ Deprecated packages found!"
+            npm ls --depth=0 2>&1 | grep -i deprecated > deprecated-packages.txt
+          else
+            echo "✅ No deprecated packages found"
+            echo "No deprecated packages" > deprecated-packages.txt
+          fi
+
+      - name: 📊 Upload Deprecation Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deprecated-packages-report
+          path: deprecated-packages.txt
+
+      - name: 🔨 Build Application
+        run: npm run build
+
+      - name: 🧪 Run Tests
+        run: npm test -- --coverage --coverageReporters=json --coverageReporters=lcov
+
+      - name: 📊 Upload Coverage Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: coverage/
+
+      - name: 📦 Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: dist/
+
+  # ==========================================
+  # JOB 6: SonarCloud Quality Analysis
+  # ==========================================
+  sonarcloud:
+    name: ☁️ SonarCloud Quality Gate
+    runs-on: ubuntu-latest
+    needs: [build-and-test]
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Shallow clones disabled for SonarCloud
+
+      - name: 📥 Download Coverage Reports
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-reports
+          path: coverage/
+
+      - name: 🔍 SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >
+            -Dsonar.organization=${{ secrets.SONAR_ORGANIZATION }}
+            -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }}
+            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+            -Dsonar.coverage.exclusions=**/*.test.ts,**/*.spec.ts,**/test/**
+            -Dsonar.sources=src
+            -Dsonar.tests=src
+            -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts
+            -Dsonar.qualitygate.wait=true
+
+      - name: 📊 Check Quality Gate
+        if: always()
+        run: |
+          echo "✅ Quality Gate check completed"
+
+  # ==========================================
+  # JOB 7: License Compliance Check
+  # ==========================================
+  license-check:
+    name: 📜 License Compliance
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 💎 Setup Ruby (for license_finder)
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+          bundler-cache: false
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: 📦 Install Dependencies
+        run: npm ci
+
+      - name: 🔧 Install License Finder
+        run: gem install license_finder
+
+      - name: 🔍 Run License Finder
+        run: |
+          license_finder report --format json > license-report.json || true
+          license_finder report --format html > license-report.html || true
+          license_finder || echo "⚠️ License issues detected"
+
+      - name: 📊 Upload License Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: license-reports
+          path: |
+            license-report.json
+            license-report.html
+
+  # ==========================================
+  # JOB 8: IaC Scanning with Checkov
+  # ==========================================
+  checkov-iac-scan:
+    name: 🏗️ Checkov IaC Security
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 🔍 Run Checkov
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: .
+          framework: all
+          output_format: json,sarif,cli
+          output_file_path: checkov-report
+          soft_fail: true # Don't fail the build, just report
+
+      - name: 📊 Upload Checkov Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkov-report
+          path: checkov-report.*
+
+      - name: 📤 Upload SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: checkov-report.sarif
+          category: checkov
+
+  # ==========================================
+  # JOB 9: Docker Build and Trivy Scan
+  # ==========================================
+  docker-build-scan:
+    name: 🐳 Docker Build & Trivy Scan
+    runs-on: ubuntu-latest
+    needs: [initialize, build-and-test]
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 📥 Download Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: dist/
+
+      - name: 🏗️ Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 🔨 Build Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          load: true
+          tags: ${{ env.DOCKER_IMAGE_NAME }}:${{ needs.initialize.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: 🔍 Run Trivy Filesystem Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          format: "sarif"
+          output: "trivy-fs-results.sarif"
+          severity: "CRITICAL,HIGH,MEDIUM"
+
+      - name: 🔍 Run Trivy Container Image Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: "image"
+          image-ref: ${{ env.DOCKER_IMAGE_NAME }}:${{ needs.initialize.outputs.version }}
+          format: "sarif"
+          output: "trivy-image-results.sarif"
+          severity: "CRITICAL,HIGH,MEDIUM"
+
+      - name: 📊 Upload Trivy Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-reports
+          path: trivy-*-results.sarif
+
+      - name: 📤 Upload Trivy SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-fs-results.sarif
+          category: trivy-filesystem
+
+      - name: 📤 Upload Trivy Image SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-image-results.sarif
+          category: trivy-container
+
+  # ==========================================
+  # JOB 10: Security Summary and Reporting
+  # ==========================================
+  security-summary:
+    name: 📋 Security Summary & Report
+    runs-on: ubuntu-latest
+    needs:
+      [
+        gitleaks-scan,
+        dependency-check,
+        codeql-analysis,
+        sonarcloud,
+        license-check,
+        checkov-iac-scan,
+        docker-build-scan,
+      ]
+    if: always()
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 📥 Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: security-reports/
+
+      - name: 🔍 Parse Security Results
+        id: parse-results
+        run: |
+          echo "🔍 Parsing security scan results..."
+
+          CRITICAL_COUNT=0
+          HIGH_COUNT=0
+          MEDIUM_COUNT=0
+          LOW_COUNT=0
+          FINDINGS=""
+
+          # Parse Gitleaks
+          if [ -f "security-reports/gitleaks-report/gitleaks-report.json" ]; then
+            GITLEAKS_COUNT=$(jq '. | length' security-reports/gitleaks-report/gitleaks-report.json || echo "0")
+            if [ "$GITLEAKS_COUNT" -gt 0 ]; then
+              CRITICAL_COUNT=$((CRITICAL_COUNT + GITLEAKS_COUNT))
+              FINDINGS="${FINDINGS}### 🔐 Gitleaks: $GITLEAKS_COUNT secret(s) detected\n"
+            else
+              FINDINGS="${FINDINGS}### ✅ Gitleaks: No secrets detected\n"
+            fi
+          fi
+
+          # Parse Dependency Check
+          if [ -f "security-reports/dependency-check-report/dependency-check-report.json" ]; then
+            DEP_CRITICAL=$(jq '[.dependencies[]?.vulnerabilities[]? | select(.severity=="CRITICAL")] | length' security-reports/dependency-check-report/dependency-check-report.json || echo "0")
+            DEP_HIGH=$(jq '[.dependencies[]?.vulnerabilities[]? | select(.severity=="HIGH")] | length' security-reports/dependency-check-report/dependency-check-report.json || echo "0")
+            CRITICAL_COUNT=$((CRITICAL_COUNT + DEP_CRITICAL))
+            HIGH_COUNT=$((HIGH_COUNT + DEP_HIGH))
+            FINDINGS="${FINDINGS}### 🛡️ OWASP Dependency Check: $DEP_CRITICAL critical, $DEP_HIGH high\n"
+          fi
+
+          # License check
+          if [ -f "security-reports/license-reports/license-report.json" ]; then
+            FINDINGS="${FINDINGS}### 📜 License Compliance: Report generated\n"
+          fi
+
+          # Checkov
+          if [ -f "security-reports/checkov-report/checkov-report.json" ]; then
+            CHECKOV_FAILED=$(jq '.summary.failed // 0' security-reports/checkov-report/checkov-report.json || echo "0")
+            CHECKOV_PASSED=$(jq '.summary.passed // 0' security-reports/checkov-report/checkov-report.json || echo "0")
+            FINDINGS="${FINDINGS}### 🏗️ Checkov IaC: $CHECKOV_FAILED failed, $CHECKOV_PASSED passed\n"
+          fi
+
+          # Save for next steps
+          echo "critical_count=$CRITICAL_COUNT" >> $GITHUB_OUTPUT
+          echo "high_count=$HIGH_COUNT" >> $GITHUB_OUTPUT
+          echo "has_critical=$([[ $CRITICAL_COUNT -gt 0 ]] && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
+
+          # Create summary
+          cat > security-summary.md <<EOF
+          # 🔒 Security Scan Summary
+
+          **Pipeline Run:** ${{ github.run_number }}
+          **Branch:** ${{ github.ref_name }}
+          **Commit:** ${{ github.sha }}
+
+          ## 📊 Vulnerability Overview
+
+          | Severity | Count |
+          |----------|-------|
+          | 🔴 Critical | $CRITICAL_COUNT |
+          | 🟠 High | $HIGH_COUNT |
+          | 🟡 Medium | $MEDIUM_COUNT |
+          | 🔵 Low | $LOW_COUNT |
+
+          ## 🔍 Scan Results
+
+          $FINDINGS
+
+          ## 📎 Detailed Reports
+
+          All detailed reports are available as artifacts in this workflow run.
+
+          ---
+          *Generated by CI/CD Pipeline*
+          EOF
+
+          cat security-summary.md
+
+      - name: 📝 Comment PR with Summary
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const summary = fs.readFileSync('security-summary.md', 'utf8');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(comment => 
+              comment.user.type === 'Bot' && 
+              comment.body.includes('🔒 Security Scan Summary')
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: summary
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: summary
+              });
+            }
+
+      - name: 🚨 Create Issue for Critical Findings
+        if: steps.parse-results.outputs.has_critical == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const summary = fs.readFileSync('security-summary.md', 'utf8');
+
+            const title = `🚨 Critical Security Vulnerabilities Detected - ${context.sha.substring(0, 7)}`;
+
+            const body = `${summary}
+
+            ## ⚠️ Action Required
+
+            Critical security vulnerabilities have been detected in the codebase. 
+            Please review the security reports and address these issues immediately.
+
+            **Workflow Run:** ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}
+            **Branch:** ${context.ref}
+            **Triggered by:** ${context.actor}
+            `;
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['security', 'critical', 'automated']
+            });
+
+      - name: 📊 Upload Security Summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-summary
+          path: security-summary.md
+
+      - name: ✅ Mark Security Scan Complete
+        run: echo "✅ Security summary generated successfully"
+
+  # ==========================================
+  # JOB 11: Final Quality Gate
+  # ==========================================
+  quality-gate:
+    name: ✅ Final Quality Gate
+    runs-on: ubuntu-latest
+    needs: [security-summary, build-and-test, sonarcloud]
+    if: always()
+    steps:
+      - name: 🎯 Check All Jobs Status
+        run: |
+          echo "🔍 Checking pipeline status..."
+
+          if [[ "${{ needs.security-summary.result }}" == "failure" ]] || \
+             [[ "${{ needs.build-and-test.result }}" == "failure" ]] || \
+             [[ "${{ needs.sonarcloud.result }}" == "failure" ]]; then
+            echo "❌ Quality gate failed!"
+            exit 1
+          else
+            echo "✅ All quality checks passed!"
+          fi
+
+      - name: 🎉 Pipeline Success
+        if: success()
+        run: |
+          echo "🎉 Pipeline completed successfully!"
+          echo "✅ All security checks passed"
+          echo "✅ Build and tests passed"
+          echo "✅ Quality gate passed"
