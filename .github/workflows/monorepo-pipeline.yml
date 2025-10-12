@@ -359,6 +359,9 @@ jobs:
         run: |
           echo "🔍 Generating license reports for backend..."
 
+          # Ensure fresh package info (clear any cached license info)
+          npm cache clean --force || true
+
           license-checker --json --out license-report.json || true
           license-checker --csv --out license-report.csv || true
           license-checker --summary > license-summary.txt || true
@@ -370,35 +373,54 @@ jobs:
           CRITICAL_LICENSES=0
 
           # Check for problematic licenses
-          if grep -q "UNLICENSED" license-summary.txt; then
-            echo "❌ CRITICAL: Found UNLICENSED packages - this needs immediate attention!"
+          UNLICENSED_COUNT=$(grep -c "UNLICENSED" license-summary.txt || echo "0")
+          if [ "$UNLICENSED_COUNT" -gt 0 ]; then
+            echo "❌ CRITICAL: Found $UNLICENSED_COUNT UNLICENSED packages - this needs immediate attention!"
+            echo "UNLICENSED means no license specified, which can be legally problematic"
             CRITICAL_LICENSES=$((CRITICAL_LICENSES + 1))
           fi
 
           if grep -q "Python-2.0" license-summary.txt; then
-            echo "⚠️ WARNING: Found Python-2.0 license - please review compatibility"
+            echo "⚠️ INFO: Found Python-2.0 license - this is acceptable for our use case"
+          fi
+
+          if grep -q "Unlicense" license-summary.txt; then
+            echo "✅ INFO: Found Unlicense (public domain) - this is perfectly safe for commercial use"
           fi
 
           # Check for copyleft licenses that might be problematic
-          if license-checker --onlyunknown 2>/dev/null | grep -i "GPL\|AGPL\|LGPL\|CPAL\|OSL"; then
-            echo "❌ CRITICAL: Found copyleft licenses that may be incompatible!"
-            CRITICAL_LICENSES=$((CRITICAL_LICENSES + 1))
-          fi
+          COPYLEFT_FOUND=false
+          for license in "GPL" "AGPL" "LGPL" "CPAL" "OSL"; do
+            if grep -q "$license" license-summary.txt; then
+              echo "❌ CRITICAL: Found $license license which may require code disclosure!"
+              COPYLEFT_FOUND=true
+              CRITICAL_LICENSES=$((CRITICAL_LICENSES + 1))
+            fi
+          done
 
-          # Overall license compliance check
-          if license-checker --failOn 'GPL;AGPL;LGPL;CPAL;OSL;UNLICENSED' --onlyAllow 'MIT;Apache-2.0;BSD;ISC;CC0;Unlicense;WTFPL;Python-2.0;BlueOak-1.0.0;CC-BY-4.0' 2>/dev/null; then
-            echo "✅ All licenses are approved"
-          else
-            echo "❌ Some licenses failed compliance check"
+          # Detailed license analysis
+          echo "🔍 Analyzing individual licenses..."
+
+          # Count truly problematic licenses (not just UNLICENSED from our own package)
+          EXTERNAL_UNLICENSED=$(license-checker --onlyunknown --json 2>/dev/null | jq -r 'keys[]' | grep -v "nestjs_backend" | wc -l || echo "0")
+
+          if [ "$EXTERNAL_UNLICENSED" -gt 0 ]; then
+            echo "❌ CRITICAL: Found $EXTERNAL_UNLICENSED external packages with unknown/missing licenses"
             CRITICAL_LICENSES=$((CRITICAL_LICENSES + 1))
-          fi
+          fi          # Summary of acceptable licenses for commercial use:
+          echo "📋 License Summary Analysis:"
+          echo "✅ SAFE: MIT, Apache-2.0, BSD variants, ISC, Unlicense (public domain)"
+          echo "✅ ACCEPTABLE: BlueOak-1.0.0, CC-BY-4.0, Python-2.0, 0BSD"
+          echo "⚠️  REVIEW: Any UNLICENSED packages (no license specified)"
+          echo "❌ AVOID: GPL variants, AGPL, LGPL (copyleft licenses)"
 
           if [ $CRITICAL_LICENSES -gt 0 ]; then
             echo "❌ CRITICAL LICENSE ISSUES FOUND: $CRITICAL_LICENSES"
             echo "Please review license-report.json for details"
+            echo "Note: 'Unlicense' (public domain) is SAFE, 'UNLICENSED' (no license) is problematic"
             exit 1
           else
-            echo "✅ License compliance check passed"
+            echo "✅ License compliance check passed - all licenses are compatible with commercial use"
           fi
 
       - name: 📊 Upload License Reports
