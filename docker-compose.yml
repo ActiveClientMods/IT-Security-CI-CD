@@ -1,0 +1,112 @@
+# Example Docker Compose for local development and integration testing
+# Place this in the root directory as docker-compose.yml
+
+version: "3.8"
+
+services:
+  # Backend Service (NestJS API)
+  backend:
+    build:
+      context: ./nestjs_backend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    env_file:
+      - .env
+    volumes:
+      - ./nestjs_backend/dist:/app/dist:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - app-network
+    depends_on:
+      - database
+      - redis
+
+  # Flutter Mobile Development Service
+  flutter-dev:
+    build:
+      context: ./flutter_frontend
+      dockerfile: Dockerfile
+    environment:
+      - BACKEND_URL=http://backend:3000
+    volumes:
+      - ./flutter_frontend:/app
+      - flutter_pub_cache:/root/.pub-cache
+    working_dir: /app
+    command:
+      [
+        "flutter",
+        "run",
+        "--hot",
+        "--web-port",
+        "8080",
+        "--web-hostname",
+        "0.0.0.0",
+      ]
+    ports:
+      - "8080:8080" # For Flutter web development (optional)
+    stdin_open: true
+    tty: true
+    networks:
+      - app-network
+    depends_on:
+      - backend
+
+  # Database Service (PostgreSQL)
+  database:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: ${DB_NAME:-appdb}
+      POSTGRES_USER: ${DB_USER:-appuser}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-apppass}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test:
+        ["CMD-SHELL", "pg_isready -U ${DB_USER:-appuser} -d ${DB_NAME:-appdb}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - app-network
+
+  # Cache Service (Redis)
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redispass}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - app-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  flutter_pub_cache:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge

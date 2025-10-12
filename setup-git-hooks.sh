@@ -54,7 +54,7 @@ pkg.scripts.lint = 'eslint src/**/*.ts';
 pkg.scripts['lint:fix'] = 'eslint src/**/*.ts --fix';
 pkg.scripts.format = 'prettier --check src/**/*.ts';
 pkg.scripts['format:fix'] = 'prettier --write src/**/*.ts';
-pkg.scripts.precommit = 'lint-staged';
+pkg.scripts.precommit = 'npx lint-staged';
 pkg['lint-staged'] = {
   'src/**/*.{ts,tsx}': ['eslint --fix', 'prettier --write'],
   'src/**/*.{json,md}': ['prettier --write']

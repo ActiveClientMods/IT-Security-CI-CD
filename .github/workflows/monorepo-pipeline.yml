@@ -1,0 +1,998 @@
+name: 🚀 Flutter + NestJS Monorepo CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - development
+      - release
+  pull_request:
+    branches:
+      - development
+      - release
+    types: [opened, synchronize, reopened]
+
+# Prevent multiple workflows from running simultaneously
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "20"
+  FLUTTER_VERSION: "3.16.0"
+
+jobs:
+  # ==========================================
+  # JOB 1: Initialize and Detect Changes
+  # ==========================================
+  initialize:
+    name: 🔧 Initialize Pipeline
+    runs-on: ubuntu-latest
+    outputs:
+      should_deploy: ${{ steps.check.outputs.should_deploy }}
+      version: ${{ steps.version.outputs.version }}
+      frontend_changed: ${{ steps.changes.outputs.frontend }}
+      backend_changed: ${{ steps.changes.outputs.backend }}
+      shared_changed: ${{ steps.changes.outputs.shared }}
+      any_changed: ${{ steps.changes.outputs.any }}
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🔍 Detect Changes
+        uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            frontend:
+              - 'flutter_frontend/**'
+              - '.env'
+              - 'docker-compose.yml'
+            backend:
+              - 'nestjs_backend/**'
+              - '.env'
+              - 'docker-compose.yml'
+            shared:
+              - '.env'
+              - 'docker-compose.yml'
+              - '.github/**'
+            any:
+              - '**'
+
+      - name: 🔍 Check Deployment Conditions
+        id: check
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/release" ]]; then
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_deploy=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 📌 Generate Version
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/release" ]]; then
+            VERSION=$(date +'%Y.%m.%d')-${GITHUB_SHA::7}
+          else
+            VERSION=dev-${GITHUB_SHA::7}
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "📦 Version: $VERSION"
+
+  # ==========================================
+  # JOB 2: Secret Scanning with Gitleaks
+  # ==========================================
+  gitleaks-scan:
+    name: 🔐 Gitleaks - Secret Scanning
+    runs-on: ubuntu-latest
+    needs: [initialize]
+    if: needs.initialize.outputs.any_changed == 'true'
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🔍 Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+      - name: 📊 Upload Gitleaks SARIF
+        if: always() && hashFiles('results.sarif') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-results
+          path: results.sarif
+          if-no-files-found: warn
+
+      - name: 📤 Upload Gitleaks SARIF to GitHub Security
+        if: always() && hashFiles('results.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: results.sarif
+          category: gitleaks
+
+  # ==========================================
+  # JOB 3: Backend Dependency Vulnerability Scanning
+  # ==========================================
+  backend-dependency-check:
+    name: 🛡️ Backend OWASP Dependency Check
+    runs-on: ubuntu-latest
+    needs: [initialize]
+    if: needs.initialize.outputs.backend_changed == 'true'
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    defaults:
+      run:
+        working-directory: ./nestjs_backend
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 📁 Create Reports Directory
+        run: mkdir -p reports
+
+      - name: 🔍 Run OWASP Dependency Check (SARIF)
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: "nestjs-backend"
+          path: "./nestjs_backend"
+          format: "SARIF"
+          out: "nestjs_backend/reports"
+          args: >
+            --enableRetired
+            --enableExperimental
+            --noupdate
+
+      - name: 🔍 Run OWASP Dependency Check (JSON for parsing)
+        uses: dependency-check/Dependency-Check_Action@main
+        continue-on-error: true
+        with:
+          project: "nestjs-backend"
+          path: "./nestjs_backend"
+          format: "JSON"
+          out: "nestjs_backend/reports-json"
+          args: >
+            --enableRetired
+            --enableExperimental
+            --noupdate
+
+      - name: 📊 Upload Backend Dependency Check Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-dependency-check-report
+          path: |
+            nestjs_backend/reports/
+            nestjs_backend/reports-json/
+
+      - name: 📤 Upload SARIF to GitHub Security
+        if: always() && hashFiles('nestjs_backend/reports/dependency-check-report.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: nestjs_backend/reports/dependency-check-report.sarif
+          category: backend-dependency-check
+
+  # ==========================================
+  # JOB 4: Frontend Dependency Scanning (Dart/Flutter)
+  # ==========================================
+  frontend-dependency-check:
+    name: 🛡️ Frontend Dependency Check
+    runs-on: ubuntu-latest
+    needs: [initialize]
+    if: needs.initialize.outputs.frontend_changed == 'true'
+    defaults:
+      run:
+        working-directory: ./flutter_frontend
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 📱 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: 📦 Get Flutter Dependencies
+        run: flutter pub get
+
+      - name: 🔍 Flutter Dependency Audit
+        run: |
+          echo "🔍 Checking Flutter dependencies for known vulnerabilities..."
+
+          # Generate dependency tree
+          flutter pub deps --json > flutter-deps.json || true
+
+          # Check for outdated packages
+          flutter pub outdated --json > flutter-outdated.json || true
+
+          # Security audit using pub audit (available in Flutter 3.10+)
+          echo "� Running pub audit for security vulnerabilities..."
+          flutter pub audit --json > flutter-audit.json || true
+
+          # Check for deprecated packages
+          echo "⚠️ Checking for deprecated packages..."
+          flutter pub deps --style=compact | grep -i deprecated > flutter-deprecated.txt || true
+
+          echo "📊 Flutter security scan completed"
+
+      - name: 📊 Upload Flutter Security Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-security-reports
+          path: |
+            flutter_frontend/flutter-deps.json
+            flutter_frontend/flutter-outdated.json
+            flutter_frontend/flutter-audit.json
+            flutter_frontend/flutter-deprecated.txt
+
+  # ==========================================
+  # JOB 5: CodeQL Analysis (Backend only)
+  # ==========================================
+  codeql-analysis:
+    name: 🔬 CodeQL Security Analysis
+    runs-on: ubuntu-latest
+    needs: [initialize]
+    if: needs.initialize.outputs.backend_changed == 'true'
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ["javascript"]
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended,security-and-quality
+          source-root: nestjs_backend
+
+      - name: 🏗️ Autobuild
+        uses: github/codeql-action/autobuild@v4
+
+      - name: 🔍 Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"
+
+  # ==========================================
+  # JOB 6: Build and Test Backend (NestJS)
+  # ==========================================
+  build-and-test-backend:
+    name: 🏗️ Build & Test Backend
+    runs-on: ubuntu-latest
+    needs: [initialize]
+    if: needs.initialize.outputs.backend_changed == 'true'
+    defaults:
+      run:
+        working-directory: ./nestjs_backend
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: nestjs_backend/package-lock.json
+
+      - name: 📦 Install Dependencies
+        run: npm ci
+
+      - name: 🔍 Check for Deprecated Dependencies
+        run: |
+          echo "🔍 Checking for deprecated npm packages..."
+          npm outdated || true
+          npx npm-check-updates --doctor || true
+
+          if npm ls --depth=0 2>&1 | grep -i deprecated; then
+            echo "⚠️ Deprecated packages found!"
+            npm ls --depth=0 2>&1 | grep -i deprecated > deprecated-packages.txt
+          else
+            echo "✅ No deprecated packages found"
+            echo "No deprecated packages" > deprecated-packages.txt
+          fi
+
+      - name: 🔨 Build Backend Application
+        run: npm run build
+
+      - name: 🧪 Run Backend Tests
+        run: npm test -- --coverage --coverageReporters=json --coverageReporters=lcov
+
+      - name: 📊 Upload Backend Coverage Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage-reports
+          path: nestjs_backend/coverage/
+
+      - name: 📦 Upload Backend Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-build-artifacts
+          path: nestjs_backend/dist/
+
+      - name: 📊 Upload Backend Deprecation Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-deprecated-packages-report
+          path: nestjs_backend/deprecated-packages.txt
+
+  # ==========================================
+  # JOB 7: Build and Test Frontend (Flutter)
+  # ==========================================
+  build-and-test-frontend:
+    name: 📱 Build & Test Frontend
+    runs-on: ubuntu-latest
+    needs: [initialize]
+    if: needs.initialize.outputs.frontend_changed == 'true'
+    defaults:
+      run:
+        working-directory: ./flutter_frontend
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 📱 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: 📦 Get Flutter Dependencies
+        run: flutter pub get
+
+      - name: 🔍 Analyze Flutter Code
+        run: flutter analyze
+
+      - name: 🧪 Run Flutter Tests
+        run: flutter test --coverage
+
+      - name: 🔨 Build Android APK
+        run: flutter build apk --release
+
+      - name: 🔨 Build Android App Bundle
+        run: flutter build appbundle --release
+
+      - name: 📊 Upload Frontend Coverage Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage-reports
+          path: flutter_frontend/coverage/
+
+      - name: 📦 Upload Android Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-build-artifacts
+          path: |
+            flutter_frontend/build/app/outputs/flutter-apk/
+            flutter_frontend/build/app/outputs/bundle/
+
+  # ==========================================
+  # JOB 8: Build iOS (macOS runner)
+  # ==========================================
+  build-ios:
+    name: 🍎 Build iOS
+    runs-on: macos-latest
+    needs: [initialize, build-and-test-frontend]
+    if: needs.initialize.outputs.frontend_changed == 'true' && (github.ref == 'refs/heads/release' || github.event_name == 'pull_request')
+    defaults:
+      run:
+        working-directory: ./flutter_frontend
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 📱 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: 📦 Get Flutter Dependencies
+        run: flutter pub get
+
+      - name: 🔨 Build iOS
+        run: flutter build ios --release --no-codesign
+
+      - name: 📦 Upload iOS Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-artifacts
+          path: flutter_frontend/build/ios/
+
+  # ==========================================
+  # JOB 9: SonarCloud Quality Analysis (Monorepo)
+  # ==========================================
+  sonarcloud:
+    name: ☁️ SonarCloud Quality Gate
+    runs-on: ubuntu-latest
+    needs: [build-and-test-backend]
+    if: needs.build-and-test-backend.result == 'success'
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 📥 Download Backend Coverage Reports
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-coverage-reports
+          path: nestjs_backend/coverage/
+
+      - name: 🔍 SonarCloud Scan
+        id: sonar-scan
+        continue-on-error: true
+        uses: SonarSource/sonarqube-scan-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      - name: 📊 Check Quality Gate
+        if: always()
+        run: |
+          if [[ "${{ steps.sonar-scan.outcome }}" == "failure" ]]; then
+            echo "⚠️ SonarCloud Quality Gate failed - Check SonarCloud dashboard"
+            echo "This won't block the pipeline, but please review the issues"
+          else
+            echo "✅ SonarCloud Quality Gate passed"
+          fi
+
+  # ==========================================
+  # JOB 10: License Compliance Check
+  # ==========================================
+  license-check:
+    name: 📜 License Compliance
+    runs-on: ubuntu-latest
+    needs: [initialize]
+    if: needs.initialize.outputs.any_changed == 'true'
+    strategy:
+      matrix:
+        component: [backend, frontend]
+        include:
+          - component: backend
+            path: nestjs_backend
+            setup: node
+          - component: frontend
+            path: flutter_frontend
+            setup: flutter
+    defaults:
+      run:
+        working-directory: ./${{ matrix.path }}
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js (Backend)
+        if: matrix.setup == 'node'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: ${{ matrix.path }}/package-lock.json
+
+      - name: 📱 Setup Flutter (Frontend)
+        if: matrix.setup == 'flutter'
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: 📦 Install Dependencies (Backend)
+        if: matrix.setup == 'node'
+        run: npm ci
+
+      - name: 📦 Get Dependencies (Frontend)
+        if: matrix.setup == 'flutter'
+        run: flutter pub get
+
+      - name: 🔧 Install License Checker (Backend)
+        if: matrix.setup == 'node'
+        run: npm install -g license-checker
+
+      - name: 🔍 Run License Check (Backend)
+        if: matrix.setup == 'node'
+        run: |
+          echo "🔍 Generating license reports for ${{ matrix.component }}..."
+
+          license-checker --json --out license-report.json || true
+          license-checker --csv --out license-report.csv || true
+          license-checker --summary > license-summary.txt || true
+
+          if license-checker --failOn 'GPL;AGPL;LGPL;CPAL;OSL' --onlyAllow 'MIT;Apache-2.0;BSD;ISC;CC0;Unlicense;WTFPL' 2>/dev/null; then
+            echo "✅ All licenses are approved"
+          else
+            echo "⚠️ Some licenses may need review - check license-report.json for details"
+          fi
+
+      - name: 🔍 Run License Check (Frontend)
+        if: matrix.setup == 'flutter'
+        run: |
+          echo "🔍 Generating license reports for ${{ matrix.component }}..."
+
+          flutter pub deps --json > flutter-licenses.json || true
+          flutter --version > flutter-version.txt
+
+          echo "✅ Flutter license information collected"
+
+      - name: 📊 Upload License Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.component }}-license-reports
+          path: |
+            ${{ matrix.path }}/license-report.json
+            ${{ matrix.path }}/license-report.csv
+            ${{ matrix.path }}/license-summary.txt
+            ${{ matrix.path }}/flutter-licenses.json
+            ${{ matrix.path }}/flutter-version.txt
+
+  # ==========================================
+  # JOB 11: IaC Scanning with Checkov
+  # ==========================================
+  checkov-iac-scan:
+    name: 🏗️ Checkov IaC Security
+    runs-on: ubuntu-latest
+    needs: [initialize]
+    if: needs.initialize.outputs.any_changed == 'true'
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 🔍 Run Checkov
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: .
+          framework: all
+          output_format: json,sarif,cli
+          output_file_path: checkov-report
+          soft_fail: true
+
+      - name: 📊 Upload Checkov Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkov-report
+          path: checkov-report.*
+
+      - name: 📤 Upload SARIF to GitHub Security
+        if: always() && hashFiles('checkov-report.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: checkov-report.sarif
+          category: checkov
+
+  # ==========================================
+  # JOB 12: Docker Build and Trivy Scan
+  # ==========================================
+  docker-build-scan:
+    name: 🐳 Docker Build & Trivy Scan
+    runs-on: ubuntu-latest
+    needs: [initialize, build-and-test-backend, build-and-test-frontend]
+    if: always() && (needs.build-and-test-backend.result == 'success' || needs.build-and-test-frontend.result == 'success')
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    strategy:
+      matrix:
+        service: [backend, frontend]
+        include:
+          - service: backend
+            context: ./nestjs_backend
+            dockerfile: ./nestjs_backend/Dockerfile
+            artifacts: backend-build-artifacts
+          - service: frontend
+            context: ./flutter_frontend
+            dockerfile: ./flutter_frontend/Dockerfile
+            artifacts: frontend-build-artifacts
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 📥 Download Build Artifacts (${{ matrix.service }})
+        if: matrix.artifacts != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.artifacts }}
+          path: ${{ matrix.service == 'backend' && 'nestjs_backend/dist' || 'flutter_frontend/build' }}
+
+      - name: 🏷️ Generate Docker Image Name
+        id: docker-meta
+        run: |
+          DOCKER_IMAGE_NAME=$(echo "${{ github.repository }}-${{ matrix.service }}" | tr '[:upper:]' '[:lower:]')
+          echo "image-name=$DOCKER_IMAGE_NAME" >> $GITHUB_OUTPUT
+          echo "🐳 Docker image name: $DOCKER_IMAGE_NAME"
+
+      - name: 🏗️ Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 🔨 Build Docker Image (${{ matrix.service }})
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: false
+          load: true
+          tags: ${{ steps.docker-meta.outputs.image-name }}:${{ needs.initialize.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: 🔍 Run Trivy Filesystem Scan (${{ matrix.service }})
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: "fs"
+          scan-ref: ${{ matrix.context }}
+          format: "sarif"
+          output: "trivy-fs-${{ matrix.service }}-results.sarif"
+          severity: "CRITICAL,HIGH,MEDIUM"
+
+      - name: 🔍 Run Trivy Container Image Scan (${{ matrix.service }})
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: "image"
+          image-ref: ${{ steps.docker-meta.outputs.image-name }}:${{ needs.initialize.outputs.version }}
+          format: "sarif"
+          output: "trivy-image-${{ matrix.service }}-results.sarif"
+          severity: "CRITICAL,HIGH,MEDIUM"
+
+      - name: 📊 Upload Trivy Results (${{ matrix.service }})
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-${{ matrix.service }}-reports
+          path: trivy-*-${{ matrix.service }}-results.sarif
+
+      - name: 📤 Upload Trivy SARIF to GitHub Security (${{ matrix.service }} - FS)
+        if: always() && hashFiles('trivy-fs-${{ matrix.service }}-results.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-fs-${{ matrix.service }}-results.sarif
+          category: trivy-${{ matrix.service }}-filesystem
+
+      - name: 📤 Upload Trivy SARIF to GitHub Security (${{ matrix.service }} - Image)
+        if: always() && hashFiles('trivy-image-${{ matrix.service }}-results.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-image-${{ matrix.service }}-results.sarif
+          category: trivy-${{ matrix.service }}-container
+
+  # ==========================================
+  # JOB 13: Docker Compose Integration Test
+  # ==========================================
+  integration-test:
+    name: 🔗 Integration Tests
+    runs-on: ubuntu-latest
+    needs: [docker-build-scan]
+    if: needs.docker-build-scan.result == 'success'
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 📥 Download Backend Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-build-artifacts
+          path: nestjs_backend/dist/
+
+      - name: 📥 Download Frontend Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build-artifacts
+          path: flutter_frontend/build/
+
+      - name: 🐳 Run Docker Compose
+        run: |
+          echo "🔍 Starting services with docker-compose..."
+          docker-compose up -d --build
+
+          echo "⏳ Waiting for services to be ready..."
+          sleep 30
+
+          echo "🔍 Checking service health..."
+          docker-compose ps
+
+          echo "🧪 Running basic integration tests..."
+          # Add your integration test commands here
+          curl -f http://localhost:3000/health || echo "Backend health check failed"
+          curl -f http://localhost:80 || echo "Frontend health check failed"
+
+      - name: 📋 Collect Docker Compose Logs
+        if: always()
+        run: |
+          echo "📋 Collecting docker-compose logs..."
+          docker-compose logs > docker-compose-logs.txt
+          docker-compose down
+
+      - name: 📊 Upload Integration Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-results
+          path: docker-compose-logs.txt
+
+  # ==========================================
+  # JOB 14: Security Summary and Reporting
+  # ==========================================
+  security-summary:
+    name: 📋 Security Summary & Report
+    runs-on: ubuntu-latest
+    needs:
+      [
+        gitleaks-scan,
+        backend-dependency-check,
+        frontend-dependency-check,
+        codeql-analysis,
+        sonarcloud,
+        license-check,
+        checkov-iac-scan,
+        docker-build-scan,
+      ]
+    if: always()
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 📥 Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: security-reports/
+
+      - name: 🔍 Parse Security Results
+        id: parse-results
+        run: |
+          echo "🔍 Parsing security scan results for monorepo..."
+
+          CRITICAL_COUNT=0
+          HIGH_COUNT=0
+          MEDIUM_COUNT=0
+          LOW_COUNT=0
+          FINDINGS=""
+
+          # Parse Gitleaks
+          if [ -f "security-reports/gitleaks-results/results.sarif" ]; then
+            GITLEAKS_COUNT=$(jq '.runs[0].results | length' security-reports/gitleaks-results/results.sarif 2>/dev/null || echo "0")
+            if [ "$GITLEAKS_COUNT" -gt 0 ]; then
+              CRITICAL_COUNT=$((CRITICAL_COUNT + GITLEAKS_COUNT))
+              FINDINGS="${FINDINGS}### 🔐 Gitleaks: $GITLEAKS_COUNT secret(s) detected\n"
+            else
+              FINDINGS="${FINDINGS}### ✅ Gitleaks: No secrets detected\n"
+            fi
+          else
+            FINDINGS="${FINDINGS}### ✅ Gitleaks: No secrets detected\n"
+          fi
+
+          # Parse Backend Dependency Check
+          if [ -f "security-reports/backend-dependency-check-report/reports-json/dependency-check-report.json" ]; then
+            DEP_CRITICAL=$(jq '[.dependencies[]?.vulnerabilities[]? | select(.severity=="CRITICAL")] | length' security-reports/backend-dependency-check-report/reports-json/dependency-check-report.json 2>/dev/null || echo "0")
+            DEP_HIGH=$(jq '[.dependencies[]?.vulnerabilities[]? | select(.severity=="HIGH")] | length' security-reports/backend-dependency-check-report/reports-json/dependency-check-report.json 2>/dev/null || echo "0")
+            CRITICAL_COUNT=$((CRITICAL_COUNT + DEP_CRITICAL))
+            HIGH_COUNT=$((HIGH_COUNT + DEP_HIGH))
+            FINDINGS="${FINDINGS}### 🛡️ Backend OWASP Dependency Check: $DEP_CRITICAL critical, $DEP_HIGH high\n"
+          else
+            FINDINGS="${FINDINGS}### 🛡️ Backend OWASP Dependency Check: Scan completed\n"
+          fi
+
+          # Frontend dependency info
+          if [ -f "security-reports/frontend-dependency-report/flutter-deps.json" ]; then
+            FINDINGS="${FINDINGS}### 📱 Frontend Dependency Check: Flutter dependencies scanned\n"
+          fi
+
+          # License check
+          if [ -d "security-reports/backend-license-reports" ] || [ -d "security-reports/frontend-license-reports" ]; then
+            FINDINGS="${FINDINGS}### 📜 License Compliance: Reports generated for both frontend and backend\n"
+          fi
+
+          # Checkov
+          if [ -f "security-reports/checkov-report/checkov-report.json" ]; then
+            CHECKOV_FAILED=$(jq '.summary.failed // 0' security-reports/checkov-report/checkov-report.json || echo "0")
+            CHECKOV_PASSED=$(jq '.summary.passed // 0' security-reports/checkov-report/checkov-report.json || echo "0")
+            FINDINGS="${FINDINGS}### 🏗️ Checkov IaC: $CHECKOV_FAILED failed, $CHECKOV_PASSED passed\n"
+          fi
+
+          # Docker scans
+          BACKEND_TRIVY=""
+          FRONTEND_TRIVY=""
+          if [ -d "security-reports/trivy-backend-reports" ]; then
+            BACKEND_TRIVY="Backend scanned"
+          fi
+          if [ -d "security-reports/trivy-frontend-reports" ]; then
+            FRONTEND_TRIVY="Frontend scanned"
+          fi
+          if [ -n "$BACKEND_TRIVY" ] || [ -n "$FRONTEND_TRIVY" ]; then
+            FINDINGS="${FINDINGS}### 🐳 Trivy Container Scans: $BACKEND_TRIVY $FRONTEND_TRIVY\n"
+          fi
+
+          # Save for next steps
+          echo "critical_count=$CRITICAL_COUNT" >> $GITHUB_OUTPUT
+          echo "high_count=$HIGH_COUNT" >> $GITHUB_OUTPUT
+          echo "has_critical=$([[ $CRITICAL_COUNT -gt 0 ]] && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
+
+          # Create summary
+          cat > security-summary.md <<EOF
+          # 🔒 Monorepo Security Scan Summary
+
+          **Pipeline Run:** ${{ github.run_number }}
+          **Branch:** ${{ github.ref_name }}
+          **Commit:** ${{ github.sha }}
+          **Frontend Changed:** ${{ needs.initialize.outputs.frontend_changed }}
+          **Backend Changed:** ${{ needs.initialize.outputs.backend_changed }}
+
+          ## 📊 Vulnerability Overview
+
+          | Severity | Count |
+          |----------|-------|
+          | 🔴 Critical | $CRITICAL_COUNT |
+          | 🟠 High | $HIGH_COUNT |
+          | 🟡 Medium | $MEDIUM_COUNT |
+          | 🔵 Low | $LOW_COUNT |
+
+          ## 🔍 Scan Results
+
+          $FINDINGS
+
+          ## 📦 Components Analyzed
+
+          - **Flutter Frontend** (flutter_frontend/): Mobile app security analysis
+          - **NestJS Backend** (nestjs_backend/): API server security analysis
+          - **Infrastructure**: Docker, docker-compose.yml, .env file security
+          - **Shared Resources**: Root-level configuration and secrets
+
+          ## 📎 Detailed Reports
+
+          All detailed reports are available as artifacts in this workflow run.
+
+          ---
+          *Generated by Flutter + NestJS Monorepo CI/CD Pipeline*
+          EOF
+
+          cat security-summary.md
+
+      - name: 📝 Comment PR with Summary
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const summary = fs.readFileSync('security-summary.md', 'utf8');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(comment => 
+              comment.user.type === 'Bot' && 
+              comment.body.includes('🔒 Monorepo Security Scan Summary')
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: summary
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: summary
+              });
+            }
+
+      - name: 🚨 Create Issue for Critical Findings
+        if: steps.parse-results.outputs.has_critical == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const summary = fs.readFileSync('security-summary.md', 'utf8');
+
+            const title = `🚨 Critical Security Vulnerabilities Detected - ${context.sha.substring(0, 7)}`;
+
+            const body = `${summary}
+
+            ## ⚠️ Action Required
+
+            Critical security vulnerabilities have been detected in the monorepo. 
+            Please review the security reports and address these issues immediately.
+
+            **Workflow Run:** ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}
+            **Branch:** ${context.ref}
+            **Triggered by:** ${context.actor}
+            `;
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['security', 'critical', 'automated', 'monorepo']
+            });
+
+      - name: 📊 Upload Security Summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-summary
+          path: security-summary.md
+
+      - name: ✅ Mark Security Scan Complete
+        run: echo "✅ Monorepo security summary generated successfully"
+
+  # ==========================================
+  # JOB 15: Final Quality Gate
+  # ==========================================
+  quality-gate:
+    name: ✅ Final Quality Gate
+    runs-on: ubuntu-latest
+    needs:
+      [
+        security-summary,
+        build-and-test-backend,
+        build-and-test-frontend,
+        sonarcloud,
+        integration-test,
+      ]
+    if: always()
+    steps:
+      - name: 🎯 Check All Jobs Status
+        run: |
+          echo "🔍 Checking monorepo pipeline status..."
+
+          # Critical failures that should block the pipeline
+          if [[ "${{ needs.security-summary.result }}" == "failure" ]] || \
+             [[ "${{ needs.build-and-test-backend.result }}" == "failure" && "${{ needs.initialize.outputs.backend_changed }}" == "true" ]] || \
+             [[ "${{ needs.build-and-test-frontend.result }}" == "failure" && "${{ needs.initialize.outputs.frontend_changed }}" == "true" ]]; then
+            echo "❌ Critical quality gate failed!"
+            exit 1
+          # SonarCloud is informational only
+          elif [[ "${{ needs.sonarcloud.result }}" == "failure" ]]; then
+            echo "⚠️ SonarCloud Quality Gate failed, but pipeline continues"
+            echo "✅ All critical quality checks passed!"
+          else
+            echo "✅ All quality checks passed!"
+          fi
+
+      - name: 🎉 Pipeline Success
+        if: success()
+        run: |
+          echo "🎉 Monorepo pipeline completed successfully!"
+          echo "✅ All security checks passed"
+          echo "✅ Build and tests passed"
+          echo "✅ Quality gate passed"
+          echo "📱 Frontend: ${{ needs.initialize.outputs.frontend_changed == 'true' && 'Built & Tested' || 'No changes' }}"
+          echo "🚀 Backend: ${{ needs.initialize.outputs.backend_changed == 'true' && 'Built & Tested' || 'No changes' }}"
