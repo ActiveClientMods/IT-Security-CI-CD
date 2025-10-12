@@ -16,6 +16,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Default permissions (minimal access)
+permissions:
+  contents: read
+
 env:
   NODE_VERSION: "20"
 
@@ -192,7 +196,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: ["javascript"]
+        language: ["javascript", "typescript"]
     steps:
       - name: 📥 Checkout Code
         uses: actions/checkout@v5
@@ -359,10 +363,42 @@ jobs:
           license-checker --csv --out license-report.csv || true
           license-checker --summary > license-summary.txt || true
 
-          if license-checker --failOn 'GPL;AGPL;LGPL;CPAL;OSL' --onlyAllow 'MIT;Apache-2.0;BSD;ISC;CC0;Unlicense;WTFPL' 2>/dev/null; then
+          echo "📊 License Summary:"
+          cat license-summary.txt
+
+          # Check for critical license issues
+          CRITICAL_LICENSES=0
+
+          # Check for problematic licenses
+          if grep -q "UNLICENSED" license-summary.txt; then
+            echo "❌ CRITICAL: Found UNLICENSED packages - this needs immediate attention!"
+            CRITICAL_LICENSES=$((CRITICAL_LICENSES + 1))
+          fi
+
+          if grep -q "Python-2.0" license-summary.txt; then
+            echo "⚠️ WARNING: Found Python-2.0 license - please review compatibility"
+          fi
+
+          # Check for copyleft licenses that might be problematic
+          if license-checker --onlyunknown 2>/dev/null | grep -i "GPL\|AGPL\|LGPL\|CPAL\|OSL"; then
+            echo "❌ CRITICAL: Found copyleft licenses that may be incompatible!"
+            CRITICAL_LICENSES=$((CRITICAL_LICENSES + 1))
+          fi
+
+          # Overall license compliance check
+          if license-checker --failOn 'GPL;AGPL;LGPL;CPAL;OSL;UNLICENSED' --onlyAllow 'MIT;Apache-2.0;BSD;ISC;CC0;Unlicense;WTFPL;Python-2.0;BlueOak-1.0.0;CC-BY-4.0' 2>/dev/null; then
             echo "✅ All licenses are approved"
           else
-            echo "⚠️ Some licenses may need review - check license-report.json for details"
+            echo "❌ Some licenses failed compliance check"
+            CRITICAL_LICENSES=$((CRITICAL_LICENSES + 1))
+          fi
+
+          if [ $CRITICAL_LICENSES -gt 0 ]; then
+            echo "❌ CRITICAL LICENSE ISSUES FOUND: $CRITICAL_LICENSES"
+            echo "Please review license-report.json for details"
+            exit 1
+          else
+            echo "✅ License compliance check passed"
           fi
 
       - name: 📊 Upload License Reports
@@ -396,9 +432,11 @@ jobs:
         with:
           directory: .
           framework: all
-          output_format: json,sarif,cli
+          output_format: sarif,json
           output_file_path: checkov-report
           soft_fail: true
+          quiet: true
+          compact: true
 
       - name: 📊 Upload Checkov Results
         if: always()
