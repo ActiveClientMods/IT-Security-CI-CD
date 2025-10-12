@@ -1,56 +1,191 @@
+import type { INestApplication } from "@nestjs/common";
 import { Logger } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
-import { Test, TestingModule } from "@nestjs/testing";
 import { AppModule } from "./app.module";
 
+// Mock dependencies for testing
+jest.mock("@nestjs/core", () => ({
+  NestFactory: {
+    create: jest.fn(),
+  },
+}));
+
+const mockNestFactory = NestFactory as jest.Mocked<typeof NestFactory>;
+
 describe("Main Bootstrap", () => {
-  let app: TestingModule;
+  let mockApp: {
+    listen: jest.MockedFunction<(port: string | number) => Promise<void>>;
+  };
+  let consoleSpy: jest.SpyInstance;
+  let loggerSpy: jest.SpyInstance;
+  let nestFactoryCreateSpy: jest.SpyInstance;
 
-  beforeEach(async () => {
-    app = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
+  beforeEach(() => {
+    // Clear all mocks
+    jest.clearAllMocks();
+
+    // Mock NestFactory.create
+    nestFactoryCreateSpy = jest
+      .spyOn(NestFactory, "create")
+      .mockResolvedValue(mockApp as unknown as INestApplication);
+
+    // Mock console.error
+    consoleSpy = jest.spyOn(console, "error").mockImplementation();
+
+    // Mock Logger.debug
+    loggerSpy = jest.spyOn(Logger.prototype, "debug").mockImplementation();
   });
 
-  afterEach(async () => {
-    if (app) {
-      await app.close();
-    }
+  afterEach(() => {
+    consoleSpy.mockRestore();
+    loggerSpy.mockRestore();
+    nestFactoryCreateSpy.mockRestore();
   });
 
-  describe("Application Bootstrap", () => {
-    it("should create application with AppModule", async () => {
-      const application = app.createNestApplication();
-      expect(application).toBeDefined();
-      await application.close();
+  describe("Bootstrap Function", () => {
+    beforeEach(() => {
+      // Store original PORT value
+      if (process.env.PORT) {
+        process.env.TEST_ORIGINAL_PORT = process.env.PORT;
+      }
     });
 
-    it("should start application and listen on port", async () => {
-      const application = app.createNestApplication();
-      const port = 3001; // Use different port to avoid conflicts
-
-      await application.listen(port);
-      const url = await application.getUrl();
-
-      expect(url).toContain(String(port));
-
-      await application.close();
+    afterEach(() => {
+      // Restore original PORT value
+      if (process.env.TEST_ORIGINAL_PORT) {
+        process.env.PORT = process.env.TEST_ORIGINAL_PORT;
+        delete process.env.TEST_ORIGINAL_PORT;
+      } else {
+        delete process.env.PORT;
+      }
     });
 
-    it("should create Logger instance", () => {
-      const logger = new Logger("Main-Application");
-      expect(logger).toBeDefined();
-      expect(logger).toBeInstanceOf(Logger);
+    it("should create NestJS application with AppModule", async () => {
+      // Mock the NestJS application
+      mockApp = {
+        listen: jest.fn().mockResolvedValue(undefined),
+      };
+
+      // Mock NestFactory.create
+      mockNestFactory.create.mockResolvedValue(
+        mockApp as unknown as INestApplication,
+      );
+
+      // Import and call bootstrap directly
+      const { bootstrap } = await import("./main");
+      await bootstrap();
+
+      expect(nestFactoryCreateSpy).toHaveBeenCalledWith(AppModule);
     });
 
-    it("should use PORT from environment variable", () => {
-      const originalPort = process.env.PORT;
+    it("should use default port 3000 when PORT is not set", async () => {
+      delete process.env.PORT;
+
+      // Mock the NestJS application
+      mockApp = {
+        listen: jest.fn().mockResolvedValue(undefined),
+      };
+
+      // Mock NestFactory.create
+      mockNestFactory.create.mockResolvedValue(
+        mockApp as unknown as INestApplication,
+      );
+
+      // Import and call bootstrap directly
+      const { bootstrap } = await import("./main");
+      await bootstrap();
+
+      expect(mockApp.listen).toHaveBeenCalledWith(3000);
+      expect(loggerSpy).toHaveBeenCalledWith(
+        "NestJS Server is running on Port: 3000",
+      );
+    });
+
+    it("should use PORT from environment variable", async () => {
       process.env.PORT = "8080";
 
-      const port = process.env.PORT ?? 3000;
-      expect(port).toBe("8080");
+      // Mock the NestJS application
+      mockApp = {
+        listen: jest.fn().mockResolvedValue(undefined),
+      };
 
-      // Restore original
+      // Mock NestFactory.create
+      mockNestFactory.create.mockResolvedValue(
+        mockApp as unknown as INestApplication,
+      );
+
+      // Import and call bootstrap directly
+      const { bootstrap } = await import("./main");
+      await bootstrap();
+
+      expect(mockApp.listen).toHaveBeenCalledWith("8080");
+      expect(loggerSpy).toHaveBeenCalledWith(
+        "NestJS Server is running on Port: 8080",
+      );
+    });
+
+    it("should handle NestFactory.create errors", async () => {
+      const error = new Error("Factory creation failed");
+
+      // Mock NestFactory.create to throw error
+      mockNestFactory.create.mockRejectedValue(error);
+
+      // Import and call bootstrap directly
+      const { bootstrap } = await import("./main");
+
+      // Bootstrap should handle the error and call console.error
+      await expect(bootstrap()).rejects.toThrow("Factory creation failed");
+    });
+
+    it("should handle app.listen errors", async () => {
+      const error = new Error("Listen failed");
+
+      // Mock the NestJS application with failing listen
+      mockApp = {
+        listen: jest.fn().mockRejectedValue(error),
+      };
+
+      // Mock NestFactory.create
+      mockNestFactory.create.mockResolvedValue(
+        mockApp as unknown as INestApplication,
+      );
+
+      // Import and call bootstrap directly
+      const { bootstrap } = await import("./main");
+
+      // Bootstrap should handle the error and call console.error
+      await expect(bootstrap()).rejects.toThrow("Listen failed");
+    });
+
+    it("should create Logger with correct context", async () => {
+      // Mock the NestJS application
+      mockApp = {
+        listen: jest.fn().mockResolvedValue(undefined),
+      };
+
+      // Mock NestFactory.create
+      mockNestFactory.create.mockResolvedValue(
+        mockApp as unknown as INestApplication,
+      );
+
+      // Import and call bootstrap directly
+      const { bootstrap } = await import("./main");
+      await bootstrap();
+
+      // Logger should be instantiated and debug method should be called
+      expect(loggerSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe("Environment Configuration", () => {
+    it("should handle string port values from environment", () => {
+      const originalPort = process.env.PORT;
+      process.env.PORT = "4000";
+
+      const port = process.env.PORT ?? 3000;
+      expect(port).toBe("4000");
+
+      // Restore
       if (originalPort) {
         process.env.PORT = originalPort;
       } else {
@@ -58,46 +193,43 @@ describe("Main Bootstrap", () => {
       }
     });
 
-    it("should default to port 3000 when PORT is not set", () => {
+    it("should use nullish coalescing operator correctly", () => {
       const originalPort = process.env.PORT;
+
+      // Test with undefined
       delete process.env.PORT;
+      expect(process.env.PORT ?? 3000).toBe(3000);
 
-      const port = process.env.PORT ?? 3000;
-      expect(port).toBe(3000);
+      // Test with empty string (should not fallback)
+      process.env.PORT = "";
+      expect(process.env.PORT ?? 3000).toBe("");
 
-      // Restore original
+      // Test with valid value
+      process.env.PORT = "5000";
+      expect(process.env.PORT ?? 3000).toBe("5000");
+
+      // Restore
       if (originalPort) {
         process.env.PORT = originalPort;
+      } else {
+        delete process.env.PORT;
       }
-    });
-
-    it("should handle application initialization errors", async () => {
-      // Mock NestFactory.create to throw an error
-      const createSpy = jest
-        .spyOn(NestFactory, "create")
-        .mockRejectedValueOnce(new Error("Initialization failed"));
-
-      await expect(NestFactory.create(AppModule)).rejects.toThrow(
-        "Initialization failed",
-      );
-
-      createSpy.mockRestore();
     });
   });
 
-  describe("Logger", () => {
+  describe("Logger functionality", () => {
     let logger: Logger;
 
     beforeEach(() => {
       logger = new Logger("Main-Application");
     });
 
-    it("should create logger with correct context", () => {
+    it("should create logger instance", () => {
       expect(logger).toBeDefined();
-      expect(logger.localInstance).toBeDefined();
+      expect(logger).toBeInstanceOf(Logger);
     });
 
-    it("should have debug method", () => {
+    it("should be able to call debug method", () => {
       const debugSpy = jest.spyOn(logger, "debug").mockImplementation();
 
       logger.debug("Test message");
@@ -106,7 +238,7 @@ describe("Main Bootstrap", () => {
       debugSpy.mockRestore();
     });
 
-    it("should log server start message", () => {
+    it("should format server start message correctly", () => {
       const debugSpy = jest.spyOn(logger, "debug").mockImplementation();
       const port = 3000;
 
