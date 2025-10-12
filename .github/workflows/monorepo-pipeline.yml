@@ -36,7 +36,7 @@ jobs:
       any_changed: ${{ steps.changes.outputs.any }}
     steps:
       - name: 📥 Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -94,7 +94,7 @@ jobs:
       contents: read
     steps:
       - name: 📥 Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -136,7 +136,7 @@ jobs:
         working-directory: ./nestjs_backend
     steps:
       - name: 📥 Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 📁 Create Reports Directory
         run: mkdir -p reports
@@ -195,7 +195,7 @@ jobs:
         working-directory: ./flutter_frontend
     steps:
       - name: 📥 Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 📱 Setup Flutter
         uses: subosito/flutter-action@v2
@@ -255,7 +255,7 @@ jobs:
         language: ["javascript"]
     steps:
       - name: 📥 Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 🔧 Initialize CodeQL
         uses: github/codeql-action/init@v4
@@ -285,10 +285,10 @@ jobs:
         working-directory: ./nestjs_backend
     steps:
       - name: 📥 Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 🟢 Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
@@ -350,7 +350,7 @@ jobs:
         working-directory: ./flutter_frontend
     steps:
       - name: 📥 Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 📱 Setup Flutter
         uses: subosito/flutter-action@v2
@@ -389,11 +389,11 @@ jobs:
             flutter_frontend/build/app/outputs/bundle/
 
   # ==========================================
-  # JOB 8: Build iOS (macOS runner)
+  # JOB 8: Build Web (Additional Platform)
   # ==========================================
-  build-ios:
-    name: 🍎 Build iOS
-    runs-on: macos-latest
+  build-web:
+    name: � Build Web
+    runs-on: ubuntu-latest
     needs: [initialize, build-and-test-frontend]
     if: needs.initialize.outputs.frontend_changed == 'true' && (github.ref == 'refs/heads/release' || github.event_name == 'pull_request')
     defaults:
@@ -401,7 +401,7 @@ jobs:
         working-directory: ./flutter_frontend
     steps:
       - name: 📥 Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 📱 Setup Flutter
         uses: subosito/flutter-action@v2
@@ -412,14 +412,14 @@ jobs:
       - name: 📦 Get Flutter Dependencies
         run: flutter pub get
 
-      - name: 🔨 Build iOS
-        run: flutter build ios --release --no-codesign
+      - name: 🔨 Build Web Application
+        run: flutter build web --release
 
-      - name: 📦 Upload iOS Build Artifacts
+      - name: 📦 Upload Web Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ios-build-artifacts
-          path: flutter_frontend/build/ios/
+          name: web-build-artifacts
+          path: flutter_frontend/build/web/
 
   # ==========================================
   # JOB 9: SonarCloud Quality Analysis (Monorepo)
@@ -431,7 +431,7 @@ jobs:
     if: needs.build-and-test-backend.result == 'success'
     steps:
       - name: 📥 Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -482,11 +482,11 @@ jobs:
         working-directory: ./${{ matrix.path }}
     steps:
       - name: 📥 Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 🟢 Setup Node.js (Backend)
         if: matrix.setup == 'node'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
@@ -562,7 +562,7 @@ jobs:
       contents: read
     steps:
       - name: 📥 Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 🔍 Run Checkov
         uses: bridgecrewio/checkov-action@master
@@ -610,10 +610,10 @@ jobs:
           - service: frontend
             context: ./flutter_frontend
             dockerfile: ./flutter_frontend/Dockerfile
-            artifacts: frontend-build-artifacts
+            artifacts: android-build-artifacts
     steps:
       - name: 📥 Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 📥 Download Build Artifacts (${{ matrix.service }})
         if: matrix.artifacts != ''
@@ -692,7 +692,7 @@ jobs:
     if: needs.docker-build-scan.result == 'success'
     steps:
       - name: 📥 Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 📥 Download Backend Artifacts
         uses: actions/download-artifact@v4
@@ -703,7 +703,7 @@ jobs:
       - name: 📥 Download Frontend Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: frontend-build-artifacts
+          name: android-build-artifacts
           path: flutter_frontend/build/
 
       - name: 🐳 Run Docker Compose
@@ -759,7 +759,7 @@ jobs:
       pull-requests: write
     steps:
       - name: 📥 Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 📥 Download All Artifacts
         uses: actions/download-artifact@v4
