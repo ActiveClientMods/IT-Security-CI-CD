@@ -47,6 +47,7 @@ jobs:
               - 'nestjs_backend/**'
               - '.env'
               - 'docker-compose.yml'
+              - '.github/workflows/**'
             shared:
               - '.env'
               - 'docker-compose.yml'
