@@ -1,8 +1,3 @@
-# Example Docker Compose for local development and integration testing
-# Place this in the root directory as docker-compose.yml
-
-version: "3.8"
-
 services:
   # Backend Service (NestJS API)
   backend:

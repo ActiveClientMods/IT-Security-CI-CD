@@ -523,27 +523,70 @@ jobs:
           name: backend-build-artifacts
           path: nestjs_backend/dist/
 
-      - name: 🐳 Run Docker Compose
+      - name: � Create Integration Test Environment
+        run: |
+          echo "🔧 Setting up integration test environment..."
+
+          # Create basic .env file for integration testing
+          cat > .env << EOF
+          NODE_ENV=production
+          PORT=3000
+          DB_NAME=appdb
+          DB_USER=appuser
+          DB_PASSWORD=apppass
+          REDIS_PASSWORD=redispass
+          EOF
+
+          echo "✅ Environment configuration created"
+
+      - name: Run Docker Compose
         run: |
           echo "🔍 Starting services with docker compose..."
           docker compose up -d --build
 
+          if [ $? -ne 0 ]; then
+            echo "❌ Failed to start services"
+            docker compose logs
+            exit 1
+          fi
+
           echo "⏳ Waiting for services to be ready..."
-          sleep 30
+          sleep 45
 
           echo "🔍 Checking service health..."
           docker compose ps
 
           echo "🧪 Running basic integration tests..."
-          # Add your integration test commands here
-          curl -f http://localhost:3000/health || echo "Backend health check failed"
+          # Wait for backend to be fully ready
+          for i in 1 2 3 4 5; do
+            if curl -f http://localhost:3000/health 2>/dev/null; then
+              echo "✅ Backend health check passed"
+              break
+            else
+              echo "⏳ Attempt $i: Backend not ready yet, waiting..."
+              sleep 10
+            fi
+          done
+
+          # Final health check
+          curl -f http://localhost:3000/health || echo "❌ Backend health check failed after multiple attempts"
 
       - name: 📋 Collect Docker Compose Logs
         if: always()
         run: |
           echo "📋 Collecting docker compose logs..."
-          docker compose logs > docker-compose-logs.txt
-          docker compose down
+
+          # Show current container status
+          echo "=== Container Status ===" > docker-compose-logs.txt
+          docker compose ps >> docker-compose-logs.txt 2>&1 || echo "Failed to get container status" >> docker-compose-logs.txt
+
+          # Collect logs from all services
+          echo -e "\n=== Service Logs ===" >> docker-compose-logs.txt
+          docker compose logs >> docker-compose-logs.txt 2>&1 || echo "Failed to collect logs" >> docker-compose-logs.txt
+
+          # Clean up
+          echo "🧹 Cleaning up services..."
+          docker compose down --volumes --remove-orphans || echo "Failed to clean up services"
 
       - name: 📊 Upload Integration Test Results
         if: always()
