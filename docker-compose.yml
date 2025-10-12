@@ -30,35 +30,7 @@ services:
       - database
       - redis
 
-  # Flutter Mobile Development Service
-  flutter-dev:
-    build:
-      context: ./flutter_frontend
-      dockerfile: Dockerfile
-    environment:
-      - BACKEND_URL=http://backend:3000
-    volumes:
-      - ./flutter_frontend:/app
-      - flutter_pub_cache:/root/.pub-cache
-    working_dir: /app
-    command:
-      [
-        "flutter",
-        "run",
-        "--hot",
-        "--web-port",
-        "8080",
-        "--web-hostname",
-        "0.0.0.0",
-      ]
-    ports:
-      - "8080:8080" # For Flutter web development (optional)
-    stdin_open: true
-    tty: true
-    networks:
-      - app-network
-    depends_on:
-      - backend
+
 
   # Database Service (PostgreSQL)
   database:
@@ -104,8 +76,7 @@ volumes:
     driver: local
   redis_data:
     driver: local
-  flutter_pub_cache:
-    driver: local
+
 
 networks:
   app-network:

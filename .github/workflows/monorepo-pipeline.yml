@@ -1,4 +1,4 @@
-name: 🚀 Flutter + NestJS Monorepo CI/CD Pipeline
+name: 🚀 NestJS Monorepo CI/CD Pipeline
 
 on:
   push:
@@ -18,7 +18,6 @@ concurrency:
 
 env:
   NODE_VERSION: "20"
-  FLUTTER_VERSION: "3.16.0"
 
 jobs:
   # ==========================================
@@ -30,7 +29,6 @@ jobs:
     outputs:
       should_deploy: ${{ steps.check.outputs.should_deploy }}
       version: ${{ steps.version.outputs.version }}
-      frontend_changed: ${{ steps.changes.outputs.frontend }}
       backend_changed: ${{ steps.changes.outputs.backend }}
       shared_changed: ${{ steps.changes.outputs.shared }}
       any_changed: ${{ steps.changes.outputs.any }}
@@ -45,10 +43,6 @@ jobs:
         id: changes
         with:
           filters: |
-            frontend:
-              - 'flutter_frontend/**'
-              - '.env'
-              - 'docker-compose.yml'
             backend:
               - 'nestjs_backend/**'
               - '.env'
@@ -183,62 +177,7 @@ jobs:
           category: backend-dependency-check
 
   # ==========================================
-  # JOB 4: Frontend Dependency Scanning (Dart/Flutter)
-  # ==========================================
-  frontend-dependency-check:
-    name: 🛡️ Frontend Dependency Check
-    runs-on: ubuntu-latest
-    needs: [initialize]
-    if: needs.initialize.outputs.frontend_changed == 'true'
-    defaults:
-      run:
-        working-directory: ./flutter_frontend
-    steps:
-      - name: 📥 Checkout Code
-        uses: actions/checkout@v5
-
-      - name: 📱 Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: true
-
-      - name: 📦 Get Flutter Dependencies
-        run: flutter pub get
-
-      - name: 🔍 Flutter Dependency Audit
-        run: |
-          echo "🔍 Checking Flutter dependencies for known vulnerabilities..."
-
-          # Generate dependency tree
-          flutter pub deps --json > flutter-deps.json || true
-
-          # Check for outdated packages
-          flutter pub outdated --json > flutter-outdated.json || true
-
-          # Security audit using pub audit (available in Flutter 3.10+)
-          echo "� Running pub audit for security vulnerabilities..."
-          flutter pub audit --json > flutter-audit.json || true
-
-          # Check for deprecated packages
-          echo "⚠️ Checking for deprecated packages..."
-          flutter pub deps --style=compact | grep -i deprecated > flutter-deprecated.txt || true
-
-          echo "📊 Flutter security scan completed"
-
-      - name: 📊 Upload Flutter Security Reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: flutter-security-reports
-          path: |
-            flutter_frontend/flutter-deps.json
-            flutter_frontend/flutter-outdated.json
-            flutter_frontend/flutter-audit.json
-            flutter_frontend/flutter-deprecated.txt
-
-  # ==========================================
-  # JOB 5: CodeQL Analysis (Backend only)
+  # JOB 4: CodeQL Analysis (Backend only)
   # ==========================================
   codeql-analysis:
     name: 🔬 CodeQL Security Analysis
@@ -338,91 +277,7 @@ jobs:
           path: nestjs_backend/deprecated-packages.txt
 
   # ==========================================
-  # JOB 7: Build and Test Frontend (Flutter)
-  # ==========================================
-  build-and-test-frontend:
-    name: 📱 Build & Test Frontend
-    runs-on: ubuntu-latest
-    needs: [initialize]
-    if: needs.initialize.outputs.frontend_changed == 'true'
-    defaults:
-      run:
-        working-directory: ./flutter_frontend
-    steps:
-      - name: 📥 Checkout Code
-        uses: actions/checkout@v5
-
-      - name: 📱 Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: true
-
-      - name: 📦 Get Flutter Dependencies
-        run: flutter pub get
-
-      - name: 🔍 Analyze Flutter Code
-        run: flutter analyze
-
-      - name: 🧪 Run Flutter Tests
-        run: flutter test --coverage
-
-      - name: 🔨 Build Android APK
-        run: flutter build apk --release
-
-      - name: 🔨 Build Android App Bundle
-        run: flutter build appbundle --release
-
-      - name: 📊 Upload Frontend Coverage Reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-coverage-reports
-          path: flutter_frontend/coverage/
-
-      - name: 📦 Upload Android Build Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-build-artifacts
-          path: |
-            flutter_frontend/build/app/outputs/flutter-apk/
-            flutter_frontend/build/app/outputs/bundle/
-
-  # ==========================================
-  # JOB 8: Build Web (Additional Platform)
-  # ==========================================
-  build-web:
-    name: � Build Web
-    runs-on: ubuntu-latest
-    needs: [initialize, build-and-test-frontend]
-    if: needs.initialize.outputs.frontend_changed == 'true' && (github.ref == 'refs/heads/release' || github.event_name == 'pull_request')
-    defaults:
-      run:
-        working-directory: ./flutter_frontend
-    steps:
-      - name: 📥 Checkout Code
-        uses: actions/checkout@v5
-
-      - name: 📱 Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: true
-
-      - name: 📦 Get Flutter Dependencies
-        run: flutter pub get
-
-      - name: 🔨 Build Web Application
-        run: flutter build web --release
-
-      - name: 📦 Upload Web Build Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: web-build-artifacts
-          path: flutter_frontend/build/web/
-
-  # ==========================================
-  # JOB 9: SonarCloud Quality Analysis (Monorepo)
+  # JOB 7: SonarCloud Quality Analysis (Monorepo)
   # ==========================================
   sonarcloud:
     name: ☁️ SonarCloud Quality Gate
@@ -469,14 +324,11 @@ jobs:
     if: needs.initialize.outputs.any_changed == 'true'
     strategy:
       matrix:
-        component: [backend, frontend]
+        component: [backend]
         include:
           - component: backend
             path: nestjs_backend
             setup: node
-          - component: frontend
-            path: flutter_frontend
-            setup: flutter
     defaults:
       run:
         working-directory: ./${{ matrix.path }}
@@ -492,29 +344,15 @@ jobs:
           cache: "npm"
           cache-dependency-path: ${{ matrix.path }}/package-lock.json
 
-      - name: 📱 Setup Flutter (Frontend)
-        if: matrix.setup == 'flutter'
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: true
-
-      - name: 📦 Install Dependencies (Backend)
-        if: matrix.setup == 'node'
+      - name: Install Dependencies (Backend)
         run: npm ci
 
-      - name: 📦 Get Dependencies (Frontend)
-        if: matrix.setup == 'flutter'
-        run: flutter pub get
-
-      - name: 🔧 Install License Checker (Backend)
-        if: matrix.setup == 'node'
+      - name: 🔧 Install License Checker
         run: npm install -g license-checker
 
-      - name: 🔍 Run License Check (Backend)
-        if: matrix.setup == 'node'
+      - name: 🔍 Run License Check
         run: |
-          echo "🔍 Generating license reports for ${{ matrix.component }}..."
+          echo "🔍 Generating license reports for backend..."
 
           license-checker --json --out license-report.json || true
           license-checker --csv --out license-report.csv || true
@@ -526,27 +364,15 @@ jobs:
             echo "⚠️ Some licenses may need review - check license-report.json for details"
           fi
 
-      - name: 🔍 Run License Check (Frontend)
-        if: matrix.setup == 'flutter'
-        run: |
-          echo "🔍 Generating license reports for ${{ matrix.component }}..."
-
-          flutter pub deps --json > flutter-licenses.json || true
-          flutter --version > flutter-version.txt
-
-          echo "✅ Flutter license information collected"
-
       - name: 📊 Upload License Reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.component }}-license-reports
+          name: backend-license-reports
           path: |
-            ${{ matrix.path }}/license-report.json
-            ${{ matrix.path }}/license-report.csv
-            ${{ matrix.path }}/license-summary.txt
-            ${{ matrix.path }}/flutter-licenses.json
-            ${{ matrix.path }}/flutter-version.txt
+            nestjs_backend/license-report.json
+            nestjs_backend/license-report.csv
+            nestjs_backend/license-summary.txt
 
   # ==========================================
   # JOB 11: IaC Scanning with Checkov
@@ -593,24 +419,20 @@ jobs:
   docker-build-scan:
     name: 🐳 Docker Build & Trivy Scan
     runs-on: ubuntu-latest
-    needs: [initialize, build-and-test-backend, build-and-test-frontend]
-    if: always() && (needs.build-and-test-backend.result == 'success' || needs.build-and-test-frontend.result == 'success')
+    needs: [initialize, build-and-test-backend]
+    if: needs.build-and-test-backend.result == 'success'
     permissions:
       security-events: write
       actions: read
       contents: read
     strategy:
       matrix:
-        service: [backend, frontend]
+        service: [backend]
         include:
           - service: backend
             context: ./nestjs_backend
             dockerfile: ./nestjs_backend/Dockerfile
             artifacts: backend-build-artifacts
-          - service: frontend
-            context: ./flutter_frontend
-            dockerfile: ./flutter_frontend/Dockerfile
-            artifacts: android-build-artifacts
     steps:
       - name: 📥 Checkout Code
         uses: actions/checkout@v5
@@ -620,7 +442,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ${{ matrix.artifacts }}
-          path: ${{ matrix.service == 'backend' && 'nestjs_backend/dist' || 'flutter_frontend/build' }}
+          path: nestjs_backend/dist
 
       - name: 🏷️ Generate Docker Image Name
         id: docker-meta
@@ -700,12 +522,6 @@ jobs:
           name: backend-build-artifacts
           path: nestjs_backend/dist/
 
-      - name: 📥 Download Frontend Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: android-build-artifacts
-          path: flutter_frontend/build/
-
       - name: 🐳 Run Docker Compose
         run: |
           echo "🔍 Starting services with docker-compose..."
@@ -720,7 +536,6 @@ jobs:
           echo "🧪 Running basic integration tests..."
           # Add your integration test commands here
           curl -f http://localhost:3000/health || echo "Backend health check failed"
-          curl -f http://localhost:80 || echo "Frontend health check failed"
 
       - name: 📋 Collect Docker Compose Logs
         if: always()
@@ -746,7 +561,6 @@ jobs:
       [
         gitleaks-scan,
         backend-dependency-check,
-        frontend-dependency-check,
         codeql-analysis,
         sonarcloud,
         license-check,
@@ -801,14 +615,9 @@ jobs:
             FINDINGS="${FINDINGS}### 🛡️ Backend OWASP Dependency Check: Scan completed\n"
           fi
 
-          # Frontend dependency info
-          if [ -f "security-reports/frontend-dependency-report/flutter-deps.json" ]; then
-            FINDINGS="${FINDINGS}### 📱 Frontend Dependency Check: Flutter dependencies scanned\n"
-          fi
-
           # License check
-          if [ -d "security-reports/backend-license-reports" ] || [ -d "security-reports/frontend-license-reports" ]; then
-            FINDINGS="${FINDINGS}### 📜 License Compliance: Reports generated for both frontend and backend\n"
+          if [ -d "security-reports/backend-license-reports" ]; then
+            FINDINGS="${FINDINGS}### 📜 License Compliance: Backend license compliance checked\n"
           fi
 
           # Checkov
@@ -819,16 +628,8 @@ jobs:
           fi
 
           # Docker scans
-          BACKEND_TRIVY=""
-          FRONTEND_TRIVY=""
           if [ -d "security-reports/trivy-backend-reports" ]; then
-            BACKEND_TRIVY="Backend scanned"
-          fi
-          if [ -d "security-reports/trivy-frontend-reports" ]; then
-            FRONTEND_TRIVY="Frontend scanned"
-          fi
-          if [ -n "$BACKEND_TRIVY" ] || [ -n "$FRONTEND_TRIVY" ]; then
-            FINDINGS="${FINDINGS}### 🐳 Trivy Container Scans: $BACKEND_TRIVY $FRONTEND_TRIVY\n"
+            FINDINGS="${FINDINGS}### 🐳 Trivy Container Scans: Backend Docker image scanned\n"
           fi
 
           # Save for next steps
@@ -843,7 +644,6 @@ jobs:
           **Pipeline Run:** ${{ github.run_number }}
           **Branch:** ${{ github.ref_name }}
           **Commit:** ${{ github.sha }}
-          **Frontend Changed:** ${{ needs.initialize.outputs.frontend_changed }}
           **Backend Changed:** ${{ needs.initialize.outputs.backend_changed }}
 
           ## 📊 Vulnerability Overview
@@ -861,7 +661,6 @@ jobs:
 
           ## 📦 Components Analyzed
 
-          - **Flutter Frontend** (flutter_frontend/): Mobile app security analysis
           - **NestJS Backend** (nestjs_backend/): API server security analysis
           - **Infrastructure**: Docker, docker-compose.yml, .env file security
           - **Shared Resources**: Root-level configuration and secrets
@@ -871,7 +670,7 @@ jobs:
           All detailed reports are available as artifacts in this workflow run.
 
           ---
-          *Generated by Flutter + NestJS Monorepo CI/CD Pipeline*
+          *Generated by NestJS Monorepo CI/CD Pipeline*
           EOF
 
           cat security-summary.md
@@ -927,7 +726,7 @@ jobs:
 
             ## ⚠️ Action Required
 
-            Critical security vulnerabilities have been detected in the monorepo. 
+            Critical security vulnerabilities have been detected in the backend. 
             Please review the security reports and address these issues immediately.
 
             **Workflow Run:** ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}
@@ -940,7 +739,7 @@ jobs:
               repo: context.repo.repo,
               title: title,
               body: body,
-              labels: ['security', 'critical', 'automated', 'monorepo']
+              labels: ['security', 'critical', 'automated', 'backend']
             });
 
       - name: 📊 Upload Security Summary
@@ -960,13 +759,7 @@ jobs:
     name: ✅ Final Quality Gate
     runs-on: ubuntu-latest
     needs:
-      [
-        security-summary,
-        build-and-test-backend,
-        build-and-test-frontend,
-        sonarcloud,
-        integration-test,
-      ]
+      [security-summary, build-and-test-backend, sonarcloud, integration-test]
     if: always()
     steps:
       - name: 🎯 Check All Jobs Status
@@ -975,8 +768,7 @@ jobs:
 
           # Critical failures that should block the pipeline
           if [[ "${{ needs.security-summary.result }}" == "failure" ]] || \
-             [[ "${{ needs.build-and-test-backend.result }}" == "failure" && "${{ needs.initialize.outputs.backend_changed }}" == "true" ]] || \
-             [[ "${{ needs.build-and-test-frontend.result }}" == "failure" && "${{ needs.initialize.outputs.frontend_changed }}" == "true" ]]; then
+             [[ "${{ needs.build-and-test-backend.result }}" == "failure" && "${{ needs.initialize.outputs.backend_changed }}" == "true" ]]; then
             echo "❌ Critical quality gate failed!"
             exit 1
           # SonarCloud is informational only
@@ -990,9 +782,8 @@ jobs:
       - name: 🎉 Pipeline Success
         if: success()
         run: |
-          echo "🎉 Monorepo pipeline completed successfully!"
+          echo "🎉 NestJS pipeline completed successfully!"
           echo "✅ All security checks passed"
           echo "✅ Build and tests passed"
           echo "✅ Quality gate passed"
-          echo "📱 Frontend: ${{ needs.initialize.outputs.frontend_changed == 'true' && 'Built & Tested' || 'No changes' }}"
           echo "🚀 Backend: ${{ needs.initialize.outputs.backend_changed == 'true' && 'Built & Tested' || 'No changes' }}"
