@@ -4,25 +4,31 @@
 # Build stage
 FROM node:23-alpine AS builder
 
+# Install pnpm globally
+RUN npm install -g pnpm
+
 WORKDIR /app
 
 # Copy package files
-COPY package*.json ./
+COPY package.json pnpm-lock.yaml ./
 
 # Install ALL dependencies (including devDependencies for build)
-RUN npm ci
+RUN pnpm install --frozen-lockfile
 
 # Copy source code
 COPY . .
 
 # Build TypeScript
-RUN npm run build
+RUN pnpm run build
 
 # Clean up devDependencies after build
-RUN npm prune --production
+RUN pnpm prune --prod
 
 # Production stage
 FROM node:23-alpine
+
+# Install pnpm globally
+RUN npm install -g pnpm
 
 # Add non-root user
 RUN addgroup -g 1001 -S nodejs && \
