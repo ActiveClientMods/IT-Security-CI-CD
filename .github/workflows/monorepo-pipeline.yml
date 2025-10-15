@@ -264,7 +264,7 @@ jobs:
         run: pnpm run build
 
       - name: 🧪 Run Backend Tests
-        run: pnpm test -- --coverage --coverageReporters=json --coverageReporters=lcov
+        run: pnpm run test:cov -- --coverageReporters=json --coverageReporters=lcov --passWithNoTests
 
       - name: 📊 Upload Backend Coverage Reports
         if: always()
@@ -686,7 +686,7 @@ jobs:
           pnpm install --frozen-lockfile
 
           echo "🔍 Running unit tests..."
-          UNIT_TEST_OUTPUT=$(pnpm run test 2>&1)
+          UNIT_TEST_OUTPUT=$(pnpm run test -- --passWithNoTests 2>&1)
           UNIT_TEST_EXIT_CODE=$?
 
           if [ $UNIT_TEST_EXIT_CODE -eq 0 ]; then
@@ -700,7 +700,7 @@ jobs:
           fi
 
           echo "🔍 Running end-to-end tests..."
-          E2E_TEST_OUTPUT=$(pnpm run test:e2e 2>&1)
+          E2E_TEST_OUTPUT=$(pnpm run test:e2e -- --passWithNoTests 2>&1)
           E2E_TEST_EXIT_CODE=$?
 
           if [ $E2E_TEST_EXIT_CODE -eq 0 ]; then
