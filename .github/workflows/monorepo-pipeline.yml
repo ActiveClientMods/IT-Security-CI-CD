@@ -217,7 +217,7 @@ jobs:
           category: "/language:${{ matrix.language }}"
 
   # ==========================================
-  # JOB 6: Build and Test Backend (NestJS)
+  # JOB 5: Build and Test Backend (NestJS)
   # ==========================================
   build-and-test-backend:
     name: 🏗️ Build & Test Backend
@@ -254,10 +254,10 @@ jobs:
       - name: 📜 License Compliance Check
         run: |
           echo "🔍 Running license compliance check..."
-          
+
           # Install license checker globally
           pnpm add -g license-checker
-          
+
           # Generate license reports
           license-checker --json --out license-report.json || true
           license-checker --csv --out license-report.csv || true
@@ -265,11 +265,11 @@ jobs:
 
           echo "📊 License Summary:"
           cat license-summary.txt
-          
+
           # Check for critical license issues (excluding our own private package)
           CRITICAL_LICENSES=0
           UNLICENSED_COUNT=$(grep -c "UNLICENSED" license-summary.txt || echo "0")
-          
+
           if [ "$UNLICENSED_COUNT" -gt 0 ]; then
             echo "⚠️ Found $UNLICENSED_COUNT UNLICENSED packages, checking details..."
             UNLICENSED_PACKAGES=$(license-checker --json | jq -r 'to_entries[] | select(.value.licenses == "UNLICENSED") | .key')
@@ -283,7 +283,7 @@ jobs:
               fi
             done
           fi
-          
+
           # Check for copyleft licenses
           for license in "GPL" "AGPL" "LGPL" "CPAL" "OSL"; do
             if grep -q "$license" license-summary.txt; then
@@ -291,7 +291,7 @@ jobs:
               CRITICAL_LICENSES=$((CRITICAL_LICENSES + 1))
             fi
           done
-          
+
           if [ $CRITICAL_LICENSES -gt 0 ]; then
             echo "❌ CRITICAL LICENSE ISSUES FOUND: $CRITICAL_LICENSES"
             exit 1
@@ -336,7 +336,7 @@ jobs:
             nestjs_backend/license-summary.txt
 
   # ==========================================
-  # JOB 7: SonarCloud Quality Analysis (Monorepo)
+  # JOB 6: SonarCloud Quality Analysis (Monorepo)
   # ==========================================
   sonarcloud:
     name: ☁️ SonarCloud Quality Gate
@@ -374,139 +374,7 @@ jobs:
           fi
 
   # ==========================================
-  # JOB 10: IaC Scanning with Checkov
-  # ==========================================
-  checkov-iac-scan:
-    name: 🏗️ Checkov IaC Security
-    runs-on: ubuntu-latest
-    needs: [initialize]
-    if: needs.initialize.outputs.any_changed == 'true'
-    permissions:
-      security-events: write
-      actions: read
-      contents: read
-    steps:
-      - name: 📥 Checkout Code
-        uses: actions/checkout@v5
-
-      - name: � Install pnpm
-        if: matrix.setup == 'node'
-        uses: pnpm/action-setup@v4
-        with:
-          version: latest
-
-      - name: �🟢 Setup Node.js (Backend)
-        if: matrix.setup == 'node'
-        uses: actions/setup-node@v5
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: "pnpm"
-          cache-dependency-path: ${{ matrix.path }}/pnpm-lock.yaml
-
-      - name: Install Dependencies (Backend)
-        run: pnpm install --frozen-lockfile
-
-      - name: 🔧 Install License Checker
-        run: pnpm add -g license-checker
-
-      - name: 🔍 Run License Check
-        run: |
-          echo "🔍 Generating license reports for backend..."
-
-          # Ensure fresh package info (clear any cached license info)
-          pnpm store prune || true
-
-          # Also clear any potential pnpm cache issues
-          rm -rf node_modules/.cache || true
-
-          # Regenerate pnpm-lock.yaml to ensure fresh dependency resolution
-          pnpm install --frozen-lockfile --no-optional
-
-          license-checker --json --out license-report.json || true
-          license-checker --csv --out license-report.csv || true
-          license-checker --summary > license-summary.txt || true
-
-          echo "📊 License Summary:"
-          cat license-summary.txt          # Check for critical license issues
-          CRITICAL_LICENSES=0
-
-          # Check for problematic licenses (excluding our own package which should be MIT)
-          UNLICENSED_COUNT=$(grep -c "UNLICENSED" license-summary.txt || echo "0")
-          if [ "$UNLICENSED_COUNT" -gt 0 ]; then
-            echo "⚠️ Found $UNLICENSED_COUNT UNLICENSED packages, checking if it's our own package..."
-            
-            # Check if the UNLICENSED package is our own nestjs_backend
-            OWN_PACKAGE_UNLICENSED=$(license-checker --json | jq -r 'to_entries[] | select(.value.licenses == "UNLICENSED") | .key' | grep -c "nestjs_backend@" || echo "0")
-            EXTERNAL_UNLICENSED=$((UNLICENSED_COUNT - OWN_PACKAGE_UNLICENSED))
-            
-            if [ "$EXTERNAL_UNLICENSED" -gt 0 ]; then
-              echo "❌ CRITICAL: Found $EXTERNAL_UNLICENSED external UNLICENSED packages!"
-              license-checker --json | jq -r 'to_entries[] | select(.value.licenses == "UNLICENSED") | .key' | grep -v "nestjs_backend@" || true
-              CRITICAL_LICENSES=$((CRITICAL_LICENSES + 1))
-            fi
-            
-            if [ "$OWN_PACKAGE_UNLICENSED" -gt 0 ]; then
-              echo "⚠️ INFO: Our package shows as UNLICENSED, but package.json specifies MIT - this is likely a cache issue"
-              # Force regenerate package.json if needed
-              echo "🔧 Attempting to clear license detection cache..."
-            fi
-          fi
-
-          if grep -q "Python-2.0" license-summary.txt; then
-            echo "⚠️ INFO: Found Python-2.0 license - this is acceptable for our use case"
-          fi
-
-          if grep -q "Unlicense" license-summary.txt; then
-            echo "✅ INFO: Found Unlicense (public domain) - this is perfectly safe for commercial use"
-          fi
-
-          # Check for copyleft licenses that might be problematic
-          COPYLEFT_FOUND=false
-          for license in "GPL" "AGPL" "LGPL" "CPAL" "OSL"; do
-            if grep -q "$license" license-summary.txt; then
-              echo "❌ CRITICAL: Found $license license which may require code disclosure!"
-              COPYLEFT_FOUND=true
-              CRITICAL_LICENSES=$((CRITICAL_LICENSES + 1))
-            fi
-          done
-
-          # Detailed license analysis
-          echo "🔍 Analyzing individual licenses..."
-
-          # Count truly problematic licenses (not just UNLICENSED from our own package)
-          EXTERNAL_UNLICENSED=$(license-checker --onlyunknown --json 2>/dev/null | jq -r 'keys[]' | grep -v "nestjs_backend" | wc -l || echo "0")
-
-          if [ "$EXTERNAL_UNLICENSED" -gt 0 ]; then
-            echo "❌ CRITICAL: Found $EXTERNAL_UNLICENSED external packages with unknown/missing licenses"
-            CRITICAL_LICENSES=$((CRITICAL_LICENSES + 1))
-          fi          # Summary of acceptable licenses for commercial use:
-          echo "📋 License Summary Analysis:"
-          echo "✅ SAFE: MIT, Apache-2.0, BSD variants, ISC, Unlicense (public domain)"
-          echo "✅ ACCEPTABLE: BlueOak-1.0.0, CC-BY-4.0, Python-2.0, 0BSD"
-          echo "⚠️  REVIEW: Any UNLICENSED packages (no license specified)"
-          echo "❌ AVOID: GPL variants, AGPL, LGPL (copyleft licenses)"
-
-          if [ $CRITICAL_LICENSES -gt 0 ]; then
-            echo "❌ CRITICAL LICENSE ISSUES FOUND: $CRITICAL_LICENSES"
-            echo "Please review license-report.json for details"
-            echo "Note: 'Unlicense' (public domain) is SAFE, 'UNLICENSED' (no license) is problematic"
-            exit 1
-          else
-            echo "✅ License compliance check passed - all licenses are compatible with commercial use"
-          fi
-
-      - name: 📊 Upload License Reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: backend-license-reports
-          path: |
-            nestjs_backend/license-report.json
-            nestjs_backend/license-report.csv
-            nestjs_backend/license-summary.txt
-
-  # ==========================================
-  # JOB 11: IaC Scanning with Checkov
+  # JOB 7: IaC Scanning with Checkov
   # ==========================================
   checkov-iac-scan:
     name: 🏗️ Checkov IaC Security
@@ -547,7 +415,7 @@ jobs:
           category: checkov
 
   # ==========================================
-  # JOB 12: Docker Build and Trivy Scan
+  # JOB 8: Docker Build and Trivy Scan
   # ==========================================
   docker-build-scan:
     name: 🐳 Docker Build & Trivy Scan
@@ -638,7 +506,7 @@ jobs:
           category: trivy-${{ matrix.service }}-container
 
   # ==========================================
-  # JOB 13: Docker Compose Integration Test
+  # JOB 9: Docker Compose Integration Test
   # ==========================================
   integration-test:
     name: 🔗 Integration Tests
@@ -649,13 +517,13 @@ jobs:
       - name: 📥 Checkout Code
         uses: actions/checkout@v5
 
-      - name:  Download Backend Artifacts
+      - name: Download Backend Artifacts
         uses: actions/download-artifact@v4
         with:
           name: backend-build-artifacts
           path: nestjs_backend/dist/
 
-      - name: � Create Integration Test Environment
+      - name: 🛠️ Create Integration Test Environment
         run: |
           echo "🔧 Setting up integration test environment..."
 
@@ -771,7 +639,7 @@ jobs:
           path: docker-compose-logs.txt
 
   # ==========================================
-  # JOB 14: Security Summary and Reporting
+  # JOB 10: Security Summary and Reporting
   # ==========================================
   security-summary:
     name: 📋 Security Summary & Report
@@ -972,7 +840,7 @@ jobs:
         run: echo "✅ Monorepo security summary generated successfully"
 
   # ==========================================
-  # JOB 15: Final Quality Gate
+  # JOB 11: Final Quality Gate
   # ==========================================
   quality-gate:
     name: ✅ Final Quality Gate
