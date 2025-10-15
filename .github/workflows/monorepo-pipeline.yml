@@ -579,7 +579,7 @@ jobs:
           export REDIS_URL="redis://:redispass@localhost:6379"
 
           echo "🔍 Running unit tests with coverage..."
-          UNIT_TEST_OUTPUT=$(pnpm exec jest --coverage --coverageReporters=json --coverageReporters=lcov --outputFile=unit-test-results.json --json --passWithNoTests --verbose 2>&1)
+          UNIT_TEST_OUTPUT=$(pnpm exec jest --coverage --coverageReporters=json --coverageReporters=lcov --passWithNoTests --verbose 2>&1)
           UNIT_TEST_EXIT_CODE=$?
 
           # Save test results to file for artifact upload
@@ -600,7 +600,7 @@ jobs:
           fi
 
           echo "🔍 Running end-to-end integration tests..."
-          E2E_TEST_OUTPUT=$(pnpm exec jest --config ./test/jest-e2e.json --outputFile=e2e-test-results.json --json --passWithNoTests --verbose 2>&1)
+          E2E_TEST_OUTPUT=$(pnpm exec jest --config ./test/jest-e2e.json --passWithNoTests --verbose 2>&1)
           E2E_TEST_EXIT_CODE=$?
 
           # Save E2E test results to file for artifact upload
@@ -636,9 +636,7 @@ jobs:
           name: complete-test-suite-results
           path: |
             nestjs_backend/unit-test-results.txt
-            nestjs_backend/unit-test-results.json
             nestjs_backend/e2e-test-results.txt
-            nestjs_backend/e2e-test-results.json
             nestjs_backend/test-results-summary.txt
 
       - name: �📋 Collect Docker Compose Logs
