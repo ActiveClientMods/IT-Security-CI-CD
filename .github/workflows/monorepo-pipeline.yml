@@ -231,20 +231,8 @@ jobs:
       - name: 📥 Checkout Code
         uses: actions/checkout@v5
 
-      - name: � Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: latest
-
-      - name: �🟢 Setup Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: "pnpm"
-          cache-dependency-path: nestjs_backend/pnpm-lock.yaml
-
-      - name: 📦 Install Dependencies
-        run: pnpm install --frozen-lockfile
+      - name: 🔧 Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm
 
       - name: 🔍 Check for Deprecated Dependencies
         run: |
@@ -262,6 +250,54 @@ jobs:
 
       - name: 🔨 Build Backend Application
         run: pnpm run build
+
+      - name: 📜 License Compliance Check
+        run: |
+          echo "🔍 Running license compliance check..."
+          
+          # Install license checker globally
+          pnpm add -g license-checker
+          
+          # Generate license reports
+          license-checker --json --out license-report.json || true
+          license-checker --csv --out license-report.csv || true
+          license-checker --summary > license-summary.txt || true
+
+          echo "📊 License Summary:"
+          cat license-summary.txt
+          
+          # Check for critical license issues (excluding our own private package)
+          CRITICAL_LICENSES=0
+          UNLICENSED_COUNT=$(grep -c "UNLICENSED" license-summary.txt || echo "0")
+          
+          if [ "$UNLICENSED_COUNT" -gt 0 ]; then
+            echo "⚠️ Found $UNLICENSED_COUNT UNLICENSED packages, checking details..."
+            UNLICENSED_PACKAGES=$(license-checker --json | jq -r 'to_entries[] | select(.value.licenses == "UNLICENSED") | .key')
+            
+            for package in $UNLICENSED_PACKAGES; do
+              if [[ "$package" == nestjs_backend* ]]; then
+                echo "✅ INFO: $package is our own private package (expected UNLICENSED status)"
+              else
+                echo "❌ CRITICAL: $package is an external package without a license!"
+                CRITICAL_LICENSES=$((CRITICAL_LICENSES + 1))
+              fi
+            done
+          fi
+          
+          # Check for copyleft licenses
+          for license in "GPL" "AGPL" "LGPL" "CPAL" "OSL"; do
+            if grep -q "$license" license-summary.txt; then
+              echo "❌ CRITICAL: Found $license license which may require code disclosure!"
+              CRITICAL_LICENSES=$((CRITICAL_LICENSES + 1))
+            fi
+          done
+          
+          if [ $CRITICAL_LICENSES -gt 0 ]; then
+            echo "❌ CRITICAL LICENSE ISSUES FOUND: $CRITICAL_LICENSES"
+            exit 1
+          else
+            echo "✅ License compliance check passed"
+          fi
 
       - name: 🧪 Run Backend Tests
         run: |
@@ -288,6 +324,16 @@ jobs:
         with:
           name: backend-deprecated-packages-report
           path: nestjs_backend/deprecated-packages.txt
+
+      - name: 📊 Upload License Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-license-reports
+          path: |
+            nestjs_backend/license-report.json
+            nestjs_backend/license-report.csv
+            nestjs_backend/license-summary.txt
 
   # ==========================================
   # JOB 7: SonarCloud Quality Analysis (Monorepo)
@@ -328,23 +374,17 @@ jobs:
           fi
 
   # ==========================================
-  # JOB 10: License Compliance Check
+  # JOB 10: IaC Scanning with Checkov
   # ==========================================
-  license-check:
-    name: 📜 License Compliance
+  checkov-iac-scan:
+    name: 🏗️ Checkov IaC Security
     runs-on: ubuntu-latest
     needs: [initialize]
     if: needs.initialize.outputs.any_changed == 'true'
-    strategy:
-      matrix:
-        component: [backend]
-        include:
-          - component: backend
-            path: nestjs_backend
-            setup: node
-    defaults:
-      run:
-        working-directory: ./${{ matrix.path }}
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
     steps:
       - name: 📥 Checkout Code
         uses: actions/checkout@v5
@@ -609,19 +649,7 @@ jobs:
       - name: 📥 Checkout Code
         uses: actions/checkout@v5
 
-      - name: 📦 Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: latest
-
-      - name: � Setup Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: "pnpm"
-          cache-dependency-path: nestjs_backend/pnpm-lock.yaml
-
-      - name: �📥 Download Backend Artifacts
+      - name:  Download Backend Artifacts
         uses: actions/download-artifact@v4
         with:
           name: backend-build-artifacts
@@ -675,18 +703,18 @@ jobs:
           # Final health check
           curl -f http://localhost:3000/health || echo "❌ Backend health check failed after multiple attempts"
 
+      - name: 🔧 Setup pnpm and Node.js for Testing
+        uses: ./.github/actions/setup-pnpm
+
       - name: 🧪 Run NestJS Integration Tests
+        working-directory: ./nestjs_backend
         run: |
           echo "🧪 Running NestJS test suite against live services..."
-          cd nestjs_backend
 
           # Set up Node.js environment for testing
           export NODE_ENV=test
           export DATABASE_URL="postgresql://appuser:apppass@localhost:5432/appdb"
           export REDIS_URL="redis://:redispass@localhost:6379"
-
-          # Install dependencies if not already cached
-          pnpm install --frozen-lockfile
 
           echo "🔍 Running unit tests..."
           UNIT_TEST_OUTPUT=$(pnpm exec jest --passWithNoTests 2>&1)
@@ -754,7 +782,7 @@ jobs:
         backend-dependency-check,
         codeql-analysis,
         sonarcloud,
-        license-check,
+        build-and-test-backend,
         checkov-iac-scan,
         docker-build-scan,
       ]
