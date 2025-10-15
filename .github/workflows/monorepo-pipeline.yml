@@ -311,18 +311,18 @@ jobs:
           name: backend-build-artifacts
           path: nestjs_backend/dist/
 
-      - name: 📊 Upload Backend Deprecation Report
+      - name: 📊 Upload Deprecated Packages Report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: backend-deprecated-packages-report
+          name: backend-deprecated-packages
           path: nestjs_backend/deprecated-packages.txt
 
-      - name: 📊 Upload License Reports
+      - name: 📊 Upload License Compliance Reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: backend-license-reports
+          name: backend-license-compliance
           path: |
             nestjs_backend/license-report.json
             nestjs_backend/license-report.csv
@@ -342,10 +342,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: 📥 Download Backend Coverage Reports
+      - name: 📥 Download Test Coverage Reports
         uses: actions/download-artifact@v4
         with:
-          name: backend-coverage-reports
+          name: complete-test-suite-coverage
           path: nestjs_backend/coverage/
 
       - name: 🔍 SonarCloud Scan
@@ -579,11 +579,18 @@ jobs:
           export REDIS_URL="redis://:redispass@localhost:6379"
 
           echo "🔍 Running unit tests with coverage..."
-          UNIT_TEST_OUTPUT=$(pnpm exec jest --coverage --coverageReporters=json --coverageReporters=lcov --passWithNoTests --verbose 2>&1)
+          UNIT_TEST_OUTPUT=$(pnpm exec jest --coverage --coverageReporters=json --coverageReporters=lcov --outputFile=unit-test-results.json --json --passWithNoTests --verbose 2>&1)
           UNIT_TEST_EXIT_CODE=$?
+
+          # Save test results to file for artifact upload
+          echo "$UNIT_TEST_OUTPUT" > unit-test-results.txt
+          echo "=== UNIT TEST EXECUTION SUMMARY ===" >> test-results-summary.txt
+          echo "$UNIT_TEST_OUTPUT" >> test-results-summary.txt
+          echo "" >> test-results-summary.txt
 
           if [ $UNIT_TEST_EXIT_CODE -eq 0 ]; then
             echo "✅ Unit tests passed with coverage"
+            echo "📊 Test results saved to unit-test-results.txt"
           elif echo "$UNIT_TEST_OUTPUT" | grep -q "No tests found"; then
             echo "⚠️ No unit tests found - skipping"
           else
@@ -593,11 +600,18 @@ jobs:
           fi
 
           echo "🔍 Running end-to-end integration tests..."
-          E2E_TEST_OUTPUT=$(pnpm exec jest --config ./test/jest-e2e.json --passWithNoTests --verbose 2>&1)
+          E2E_TEST_OUTPUT=$(pnpm exec jest --config ./test/jest-e2e.json --outputFile=e2e-test-results.json --json --passWithNoTests --verbose 2>&1)
           E2E_TEST_EXIT_CODE=$?
+
+          # Save E2E test results to file for artifact upload
+          echo "$E2E_TEST_OUTPUT" > e2e-test-results.txt
+          echo "=== E2E INTEGRATION TEST EXECUTION SUMMARY ===" >> test-results-summary.txt
+          echo "$E2E_TEST_OUTPUT" >> test-results-summary.txt
+          echo "" >> test-results-summary.txt
 
           if [ $E2E_TEST_EXIT_CODE -eq 0 ]; then
             echo "✅ E2E integration tests passed"
+            echo "📊 E2E test results saved to e2e-test-results.txt"
           elif echo "$E2E_TEST_OUTPUT" | grep -q "No tests found"; then
             echo "⚠️ No e2e tests found - skipping (this is normal for new projects)"
           else
@@ -608,12 +622,24 @@ jobs:
 
           echo "✅ Complete test suite finished"
 
-      - name: � Upload Test Coverage Reports
+      - name: 📊 Upload Test Coverage Reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: backend-coverage-reports
+          name: complete-test-suite-coverage
           path: nestjs_backend/coverage/
+
+      - name: 📋 Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: complete-test-suite-results
+          path: |
+            nestjs_backend/unit-test-results.txt
+            nestjs_backend/unit-test-results.json
+            nestjs_backend/e2e-test-results.txt
+            nestjs_backend/e2e-test-results.json
+            nestjs_backend/test-results-summary.txt
 
       - name: �📋 Collect Docker Compose Logs
         if: always()
@@ -632,11 +658,11 @@ jobs:
           echo "🧹 Cleaning up services..."
           docker compose down --volumes --remove-orphans || echo "Failed to clean up services"
 
-      - name: 📊 Upload Integration Test Results
+      - name: 📊 Upload Docker Environment Logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: integration-test-results
+          name: docker-compose-logs
           path: docker-compose-logs.txt
 
   # ==========================================
@@ -704,7 +730,7 @@ jobs:
           fi
 
           # License check
-          if [ -d "security-reports/backend-license-reports" ]; then
+          if [ -d "security-reports/backend-license-compliance" ]; then
             FINDINGS="${FINDINGS}### 📜 License Compliance: Backend license compliance checked\n"
           fi
 
