@@ -264,7 +264,10 @@ jobs:
         run: pnpm run build
 
       - name: 🧪 Run Backend Tests
-        run: pnpm run test:cov -- --coverageReporters=json --coverageReporters=lcov --passWithNoTests
+        run: |
+          echo "Running tests with Jest directly..."
+          # Use npx/pnpm exec to run jest directly with proper flags
+          pnpm exec jest --coverage --coverageReporters=json --coverageReporters=lcov --passWithNoTests --verbose
 
       - name: 📊 Upload Backend Coverage Reports
         if: always()
@@ -686,7 +689,7 @@ jobs:
           pnpm install --frozen-lockfile
 
           echo "🔍 Running unit tests..."
-          UNIT_TEST_OUTPUT=$(pnpm run test -- --passWithNoTests 2>&1)
+          UNIT_TEST_OUTPUT=$(pnpm exec jest --passWithNoTests 2>&1)
           UNIT_TEST_EXIT_CODE=$?
 
           if [ $UNIT_TEST_EXIT_CODE -eq 0 ]; then
@@ -700,7 +703,7 @@ jobs:
           fi
 
           echo "🔍 Running end-to-end tests..."
-          E2E_TEST_OUTPUT=$(pnpm run test:e2e -- --passWithNoTests 2>&1)
+          E2E_TEST_OUTPUT=$(pnpm exec jest --config ./test/jest-e2e.json --passWithNoTests 2>&1)
           E2E_TEST_EXIT_CODE=$?
 
           if [ $E2E_TEST_EXIT_CODE -eq 0 ]; then

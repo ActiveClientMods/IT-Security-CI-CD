@@ -1,9 +1,8 @@
 {
   "name": "nestjs_backend",
   "version": "0.0.1",
-  "description": "",
-  "author": "",
-  "private": true,
+  "description": "CI/CD Pipeline project with GitHub Actions, Dependabot, SonarQube and many more.",
+  "author": "ActiveClientMods",
   "license": "MIT",
   "scripts": {
     "build": "nest build",
