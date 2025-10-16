@@ -498,7 +498,7 @@ jobs:
   # JOB 9: Complete Test Suite (Unit & E2E Integration)
   # ==========================================
   integration-test:
-    name: 🧪 Complete Test Suite
+    name: Complete Test Suite
     runs-on: ubuntu-latest
     needs: [docker-build-scan]
     if: needs.docker-build-scan.result == 'success'
