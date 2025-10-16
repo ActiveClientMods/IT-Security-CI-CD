@@ -17,19 +17,19 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: 📦 Install pnpm
+    - name: Install pnpm
       uses: pnpm/action-setup@v4
       with:
         version: latest
 
-    - name: 🟢 Setup Node.js
+    - name: Setup Node.js
       uses: actions/setup-node@v5
       with:
         node-version: ${{ inputs.node-version }}
         cache: "pnpm"
         cache-dependency-path: ${{ inputs.working-directory }}/pnpm-lock.yaml
 
-    - name: 📦 Install Dependencies
+    - name: Install Dependencies
       if: inputs.install-deps == 'true'
       shell: bash
       working-directory: ${{ inputs.working-directory }}

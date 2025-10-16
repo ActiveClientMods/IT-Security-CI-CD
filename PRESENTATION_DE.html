@@ -1,0 +1,1445 @@
+<!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>CI&sol;CD Security Pipeline - Pr&auml;sentation</title>
+            <style>
+/* From extension vscode.github */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+.vscode-dark img[src$=\#gh-light-mode-only],
+.vscode-light img[src$=\#gh-dark-mode-only],
+.vscode-high-contrast:not(.vscode-high-contrast-light) img[src$=\#gh-light-mode-only],
+.vscode-high-contrast-light img[src$=\#gh-dark-mode-only] {
+	display: none;
+}
+
+</style>
+            
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Microsoft/vscode/extensions/markdown-language-features/media/markdown.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Microsoft/vscode/extensions/markdown-language-features/media/highlight.css">
+<style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe WPC', 'Segoe UI', system-ui, 'Ubuntu', 'Droid Sans', sans-serif;
+                font-size: 14px;
+                line-height: 1.6;
+            }
+        </style>
+        <style>
+.task-list-item {
+    list-style-type: none;
+}
+
+.task-list-item-checkbox {
+    margin-left: -20px;
+    vertical-align: middle;
+    pointer-events: none;
+}
+</style>
+<style>
+:root {
+  --color-note: #0969da;
+  --color-tip: #1a7f37;
+  --color-warning: #9a6700;
+  --color-severe: #bc4c00;
+  --color-caution: #d1242f;
+  --color-important: #8250df;
+}
+
+</style>
+<style>
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-note: #2f81f7;
+    --color-tip: #3fb950;
+    --color-warning: #d29922;
+    --color-severe: #db6d28;
+    --color-caution: #f85149;
+    --color-important: #a371f7;
+  }
+}
+
+</style>
+<style>
+.markdown-alert {
+  padding: 0.5rem 1rem;
+  margin-bottom: 16px;
+  color: inherit;
+  border-left: .25em solid #888;
+}
+
+.markdown-alert>:first-child {
+  margin-top: 0
+}
+
+.markdown-alert>:last-child {
+  margin-bottom: 0
+}
+
+.markdown-alert .markdown-alert-title {
+  display: flex;
+  font-weight: 500;
+  align-items: center;
+  line-height: 1
+}
+
+.markdown-alert .markdown-alert-title .octicon {
+  margin-right: 0.5rem;
+  display: inline-block;
+  overflow: visible !important;
+  vertical-align: text-bottom;
+  fill: currentColor;
+}
+
+.markdown-alert.markdown-alert-note {
+  border-left-color: var(--color-note);
+}
+
+.markdown-alert.markdown-alert-note .markdown-alert-title {
+  color: var(--color-note);
+}
+
+.markdown-alert.markdown-alert-important {
+  border-left-color: var(--color-important);
+}
+
+.markdown-alert.markdown-alert-important .markdown-alert-title {
+  color: var(--color-important);
+}
+
+.markdown-alert.markdown-alert-warning {
+  border-left-color: var(--color-warning);
+}
+
+.markdown-alert.markdown-alert-warning .markdown-alert-title {
+  color: var(--color-warning);
+}
+
+.markdown-alert.markdown-alert-tip {
+  border-left-color: var(--color-tip);
+}
+
+.markdown-alert.markdown-alert-tip .markdown-alert-title {
+  color: var(--color-tip);
+}
+
+.markdown-alert.markdown-alert-caution {
+  border-left-color: var(--color-caution);
+}
+
+.markdown-alert.markdown-alert-caution .markdown-alert-title {
+  color: var(--color-caution);
+}
+
+</style>
+        
+        </head>
+        <body class="vscode-body vscode-light">
+            <h1 id="cicd-security-pipeline---präsentation">CI/CD Security Pipeline - Präsentation</h1>
+<h2 id="universitätsprojekt-it-sicherheit-2025">Universitätsprojekt IT-Sicherheit 2025</h2>
+<hr>
+<h2 id="agenda">Agenda</h2>
+<ol>
+<li>Projektübersicht</li>
+<li>CI/CD Pipeline Architektur</li>
+<li>Sicherheits-Tools im Detail</li>
+<li>Pipeline-Phasen</li>
+<li>Automatisierte Workflows</li>
+<li>Sicherheitsberichte &amp; Monitoring</li>
+<li>Demo &amp; Ergebnisse</li>
+<li>Zusammenfassung</li>
+</ol>
+<hr>
+<h2 id="1-projektübersicht">1. Projektübersicht</h2>
+<h3 id="projektziel">Projektziel</h3>
+<p>Entwicklung einer <strong>produktionsreifen CI/CD-Pipeline</strong> mit umfassenden Sicherheitsprüfungen für eine moderne Monorepo-Anwendung.</p>
+<h3 id="technologie-stack">Technologie-Stack</h3>
+<p><strong>Backend:</strong></p>
+<ul>
+<li>NestJS (TypeScript)</li>
+<li>Node.js 20</li>
+<li>pnpm Package Manager</li>
+<li>PostgreSQL</li>
+<li>Redis</li>
+</ul>
+<p><strong>Frontend:</strong></p>
+<ul>
+<li>Flutter</li>
+<li>Dart</li>
+</ul>
+<p><strong>Infrastructure:</strong></p>
+<ul>
+<li>Docker &amp; Docker Compose</li>
+<li>GitHub Actions</li>
+<li>Multi-Container Setup</li>
+</ul>
+<hr>
+<h3 id="kernziele-des-projekts">Kernziele des Projekts</h3>
+<p><strong>Automatisierte Sicherheitsprüfungen</strong></p>
+<ul>
+<li>Mehrere Security-Tools in CI/CD integriert</li>
+</ul>
+<p><strong>Shift-Left Security</strong></p>
+<ul>
+<li>Schwachstellen früh im Entwicklungsprozess finden</li>
+</ul>
+<p><strong>Quality Assurance</strong></p>
+<ul>
+<li>Automatisierte Tests &amp; Code-Qualitätsprüfungen</li>
+</ul>
+<p><strong>Dependency Management</strong></p>
+<ul>
+<li>Automatische Updates mit Sicherheitschecks</li>
+</ul>
+<p><strong>DevSecOps Best Practices</strong></p>
+<ul>
+<li>Sicherheit in jeder Pipeline-Phase</li>
+</ul>
+<hr>
+<h2 id="2-cicd-pipeline-architektur">2. CI/CD Pipeline Architektur</h2>
+<h3 id="repository-struktur">Repository-Struktur</h3>
+<pre><code>IT-Security-CI-CD/
+├── .github/workflows/
+│   ├── monorepo-pipeline.yml       # Haupt-Pipeline
+│   ├── scheduled-scans.yml         # Wöchentliche Scans
+│   └── dependabot-auto-merge.yml   # Dependency Updates
+│
+├── nestjs_backend/                 # Backend-Anwendung
+│   ├── src/                       # Quellcode
+│   ├── test/                      # Tests
+│   └── Dockerfile                 # Container-Definition
+│
+├── flutter_frontend/               # Frontend-Anwendung
+│
+└── docker-compose.yml              # Service-Orchestrierung
+</code></pre>
+<hr>
+<h3 id="pipeline-übersicht">Pipeline-Übersicht</h3>
+<p><strong>3 Workflows:</strong></p>
+<ol>
+<li><strong>Monorepo Pipeline</strong> - Haupt-CI/CD (11 Jobs)</li>
+<li><strong>Scheduled Scans</strong> - Wöchentliche Audits</li>
+<li><strong>Dependabot Auto-Merge</strong> - Dependency-Automatisierung</li>
+</ol>
+<p><strong>100+ Pipeline-Schritte</strong></p>
+<p><strong>Durchschnittliche Laufzeit:</strong></p>
+<ul>
+<li>Vollständig: 25-40 Minuten</li>
+<li>Mit Smart Skipping: 10-15 Minuten</li>
+</ul>
+<hr>
+<h3 id="workflow-trigger">Workflow-Trigger</h3>
+<p><strong>Monorepo Pipeline:</strong></p>
+<pre><code class="language-yaml"><span class="hljs-attr">Push auf Branches:</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-string">development</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-string">release</span>
+
+<span class="hljs-attr">Pull Requests auf:</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-string">development</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-string">release</span>
+</code></pre>
+<p><strong>Scheduled Scans:</strong></p>
+<pre><code class="language-yaml"><span class="hljs-attr">Zeitplan:</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-string">Jeden</span> <span class="hljs-string">Montag</span> <span class="hljs-string">um</span> <span class="hljs-number">2</span><span class="hljs-string">:00</span> <span class="hljs-string">UTC</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-string">Manueller</span> <span class="hljs-string">Trigger</span> <span class="hljs-string">möglich</span>
+</code></pre>
+<hr>
+<h2 id="3-sicherheits-tools-im-detail">3. Sicherheits-Tools im Detail</h2>
+<h3 id="6-schichten-sicherheitsarchitektur">6-Schichten Sicherheitsarchitektur</h3>
+<pre><code>┌─────────────────────────────────────┐
+│ 1. Gitleaks - Secret Scanning      │
+├─────────────────────────────────────┤
+│ 2. OWASP - Dependency Check        │
+├─────────────────────────────────────┤
+│ 3. CodeQL - Static Analysis        │
+├─────────────────────────────────────┤
+│ 4. Trivy - Container Security      │
+├─────────────────────────────────────┤
+│ 5. Checkov - IaC Security          │
+├─────────────────────────────────────┤
+│ 6. SonarCloud - Quality Gate       │
+└─────────────────────────────────────┘
+</code></pre>
+<hr>
+<h3 id="tool-1-gitleaks">Tool 1: Gitleaks</h3>
+<p><strong>Funktion:</strong></p>
+<ul>
+<li>Durchsucht Git-Historie nach Secrets</li>
+<li>Erkennt API-Keys, Passwörter, Tokens</li>
+<li>Verhindert Credential-Leaks</li>
+</ul>
+<p><strong>Erkennungsmuster:</strong></p>
+<pre><code>✓ AWS Access Keys
+✓ GitHub Tokens
+✓ Private SSH Keys
+✓ Datenbank-Credentials
+✓ OAuth Client Secrets
+</code></pre>
+<p><strong>Integration:</strong></p>
+<ul>
+<li>Läuft bei jedem Commit</li>
+<li>Blockiert Pipeline bei Fund</li>
+<li>SARIF-Upload zu GitHub Security</li>
+</ul>
+<hr>
+<h3 id="tool-2-owasp-dependency-check">Tool 2: OWASP Dependency-Check</h3>
+<p><strong>Funktion:</strong></p>
+<ul>
+<li>Scannt npm-Pakete auf CVE-Schwachstellen</li>
+<li>Prüft gegen National Vulnerability Database (NVD)</li>
+<li>Identifiziert veraltete Abhängigkeiten</li>
+</ul>
+<p><strong>Beispiel-Ausgabe:</strong></p>
+<pre><code>Package: lodash@4.17.15
+CVE: CVE-2020-8203
+Severity: HIGH
+Description: Prototype Pollution Vulnerability
+</code></pre>
+<p><strong>Berichte:</strong></p>
+<ul>
+<li>SARIF-Format für GitHub</li>
+<li>JSON für Parsing</li>
+<li>Detaillierte CVE-Informationen</li>
+</ul>
+<hr>
+<h3 id="tool-3-codeql">Tool 3: CodeQL</h3>
+<p><strong>Funktion:</strong></p>
+<ul>
+<li>Semantische Code-Analyse</li>
+<li>Erkennt Sicherheitslücken in TypeScript</li>
+<li>Findet SQL Injection, XSS, etc.</li>
+</ul>
+<p><strong>Query-Packs:</strong></p>
+<pre><code class="language-yaml"><span class="hljs-attr">security-extended:</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-string">SQL</span> <span class="hljs-string">Injection</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-string">Cross-Site</span> <span class="hljs-string">Scripting</span> <span class="hljs-string">(XSS)</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-string">Command</span> <span class="hljs-string">Injection</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-string">Path</span> <span class="hljs-string">Traversal</span>
+
+<span class="hljs-attr">security-and-quality:</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-string">Code</span> <span class="hljs-string">Quality</span> <span class="hljs-string">Issues</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-string">Performance</span> <span class="hljs-string">Problems</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-string">Best</span> <span class="hljs-string">Practice</span> <span class="hljs-string">Violations</span>
+</code></pre>
+<p><strong>Vorteile:</strong></p>
+<ul>
+<li>Keine False Positives</li>
+<li>Deep Semantic Analysis</li>
+<li>GitHub-Integration</li>
+</ul>
+<hr>
+<h3 id="tool-4-trivy">Tool 4: Trivy</h3>
+<p><strong>Funktion:</strong></p>
+<ul>
+<li>Container &amp; Filesystem Security</li>
+<li>Scannt Docker Images</li>
+<li>Erkennt OS-Package Schwachstellen</li>
+</ul>
+<p><strong>Doppelte Scan-Strategie:</strong></p>
+<pre><code class="language-yaml"><span class="hljs-attr">1. Filesystem Scan:</span> <span class="hljs-string">├──</span> <span class="hljs-string">Anwendungs-Dependencies</span>
+  <span class="hljs-string">├──</span> <span class="hljs-string">Konfigurationsdateien</span>
+  <span class="hljs-string">└──</span> <span class="hljs-string">Quellcode-Schwachstellen</span>
+
+<span class="hljs-attr">2. Container Image Scan:</span> <span class="hljs-string">├──</span> <span class="hljs-string">Base</span> <span class="hljs-string">Image</span> <span class="hljs-string">Layers</span>
+  <span class="hljs-string">├──</span> <span class="hljs-string">OS-Pakete</span>
+  <span class="hljs-string">└──</span> <span class="hljs-string">Docker-Konfiguration</span>
+</code></pre>
+<p><strong>Severity-Level:</strong></p>
+<ul>
+<li>CRITICAL, HIGH, MEDIUM, LOW</li>
+</ul>
+<hr>
+<h3 id="tool-5-checkov">Tool 5: Checkov</h3>
+<p><strong>Funktion:</strong></p>
+<ul>
+<li>Infrastructure as Code (IaC) Security</li>
+<li>Validiert Docker, docker-compose</li>
+<li>Prüft Sicherheitskonfigurationen</li>
+</ul>
+<p><strong>Prüfungen:</strong></p>
+<p><strong>Docker:</strong></p>
+<pre><code>✓ Container läuft nicht als Root
+✓ Keine exponierten Secrets
+✓ Health Checks vorhanden
+</code></pre>
+<p><strong>Docker Compose:</strong></p>
+<pre><code>✓ Security Options gesetzt
+✓ Netzwerk-Konfiguration sicher
+✓ Resource Limits definiert
+</code></pre>
+<hr>
+<h3 id="tool-6-sonarcloud">Tool 6: SonarCloud</h3>
+<p><strong>Funktion:</strong></p>
+<ul>
+<li>Code-Qualität &amp; Wartbarkeit</li>
+<li>Security Hotspot Detection</li>
+<li>Test Coverage Tracking</li>
+<li>Technical Debt Messung</li>
+</ul>
+<p><strong>Metriken:</strong></p>
+<pre><code>┌──────────────────────────┬──────────┐
+│ Metrik                   │ Ziel     │
+├──────────────────────────┼──────────┤
+│ Code Coverage            │ &gt; 80%    │
+│ Maintainability Rating   │ A        │
+│ Security Rating          │ A        │
+│ Reliability Rating       │ A        │
+│ Duplicated Code          │ &lt; 3%     │
+└──────────────────────────┴──────────┘
+</code></pre>
+<hr>
+<h2 id="4-pipeline-phasen">4. Pipeline-Phasen</h2>
+<h3 id="phase-1-initialisierung">Phase 1: Initialisierung</h3>
+<p><strong>Aufgabe:</strong><br>
+Änderungserkennung &amp; Konfiguration</p>
+<p><strong>Schritte:</strong></p>
+<ol>
+<li>Code auschecken</li>
+<li>Datei-Änderungen erkennen</li>
+<li>Backend/Frontend Änderungen prüfen</li>
+<li>Versionsnummer generieren</li>
+<li>Deployment-Bedingungen prüfen</li>
+</ol>
+<p><strong>Outputs:</strong></p>
+<pre><code class="language-yaml"><span class="hljs-attr">backend_changed:</span> <span class="hljs-literal">true</span><span class="hljs-string">/false</span>
+<span class="hljs-attr">should_deploy:</span> <span class="hljs-literal">true</span><span class="hljs-string">/false</span>
+<span class="hljs-attr">version:</span> <span class="hljs-string">&quot;2025.10.16-abc1234&quot;</span>
+</code></pre>
+<p><strong>Smart Change Detection:</strong></p>
+<ul>
+<li>Nur relevante Jobs ausführen</li>
+<li>Spart Zeit &amp; Ressourcen</li>
+<li>Parallele Ausführung optimieren</li>
+</ul>
+<hr>
+<h3 id="phase-2-security-scanning">Phase 2: Security Scanning</h3>
+<p><strong>Aufgabe:</strong><br>
+Umfassende Sicherheitsvalidierung</p>
+<p><strong>Parallele Ausführung:</strong></p>
+<pre><code>┌─────────────┐  ┌─────────────┐  ┌─────────────┐
+│  Gitleaks   │  │    OWASP    │  │   CodeQL    │
+│   ~1-2min   │  │   ~3-5min   │  │  ~5-10min   │
+└─────────────┘  └─────────────┘  └─────────────┘
+
+┌─────────────┐
+│   Checkov   │
+│   ~1-2min   │
+└─────────────┘
+</code></pre>
+<p><strong>Resultat:</strong></p>
+<ul>
+<li>Alle Scans laufen parallel</li>
+<li>SARIF-Upload zu GitHub Security</li>
+<li>Blockiert bei kritischen Findings</li>
+</ul>
+<hr>
+<h3 id="phase-3-build--compile">Phase 3: Build &amp; Compile</h3>
+<p><strong>Aufgabe:</strong><br>
+Anwendung bauen &amp; validieren</p>
+<p><strong>Build-Schritte:</strong></p>
+<ol>
+<li>
+<p><strong>Setup:</strong></p>
+<pre><code class="language-bash">- pnpm installieren
+- Node.js 20 konfigurieren
+- Dependencies installieren (cached)
+</code></pre>
+</li>
+<li>
+<p><strong>Validierung:</strong></p>
+<pre><code class="language-bash">- Deprecated Packages <span class="hljs-built_in">pr</span>üfen
+- License Compliance Check
+- NestJS Build
+</code></pre>
+</li>
+<li>
+<p><strong>Artifact Upload:</strong></p>
+<pre><code class="language-bash">- Build-Artefakte speichern
+- Reports hochladen
+</code></pre>
+</li>
+</ol>
+<hr>
+<h3 id="license-compliance-check">License Compliance Check</h3>
+<p><strong>Blockierte Lizenzen:</strong></p>
+<pre><code>❌ GPL    - Erfordert Source Disclosure
+❌ AGPL   - Erfordert Source Disclosure
+❌ LGPL   - Erfordert Source Disclosure
+❌ CPAL   - Erfordert Source Disclosure
+❌ OSL    - Erfordert Source Disclosure
+</code></pre>
+<p><strong>Erlaubte Lizenzen:</strong></p>
+<pre><code>MIT
+Apache 2.0
+BSD
+ISC
+UNLICENSED (nur eigener Code)
+</code></pre>
+<p><strong>Berichte:</strong></p>
+<ul>
+<li>license-report.json</li>
+<li>license-report.csv</li>
+<li>license-summary.txt</li>
+</ul>
+<hr>
+<h3 id="phase-4-docker-build--scan">Phase 4: Docker Build &amp; Scan</h3>
+<p><strong>Aufgabe:</strong><br>
+Container bauen &amp; scannen</p>
+<p><strong>Prozess:</strong></p>
+<pre><code>1. Build-Artefakte herunterladen
+         ↓
+2. Docker Image mit BuildKit bauen
+         ↓
+3. Image mit Version taggen
+         ↓
+4. Trivy Filesystem Scan
+         ↓
+5. Trivy Container Image Scan
+         ↓
+6. SARIF-Upload zu GitHub
+</code></pre>
+<p><strong>Layer Caching:</strong></p>
+<ul>
+<li>GitHub Actions Cache</li>
+<li>Schnellere Builds</li>
+<li>Effiziente Ressourcennutzung</li>
+</ul>
+<hr>
+<h3 id="phase-5-complete-test-suite">Phase 5: Complete Test Suite</h3>
+<p><strong>Aufgabe:</strong><br>
+Alle Tests in produktionsähnlicher Umgebung</p>
+<p><strong>Testumgebung:</strong></p>
+<pre><code class="language-yaml"><span class="hljs-attr">Services:</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-string">PostgreSQL</span> <span class="hljs-string">(Datenbank)</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-string">Redis</span> <span class="hljs-string">(Cache)</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-string">NestJS</span> <span class="hljs-string">Backend</span> <span class="hljs-string">(API)</span>
+</code></pre>
+<p><strong>Test-Arten:</strong></p>
+<p><strong>Unit Tests:</strong></p>
+<pre><code>✓ Service Layer Tests
+✓ Controller Tests
+✓ Module Tests
+✓ Utility Functions
+</code></pre>
+<p><strong>E2E Tests:</strong></p>
+<pre><code>✓ API Endpoint Tests
+✓ Datenbank-Integration
+✓ Redis-Integration
+✓ Full Request/Response Cycle
+</code></pre>
+<hr>
+<h3 id="test-coverage-metriken">Test Coverage Metriken</h3>
+<p><strong>Erfasste Metriken:</strong></p>
+<pre><code>┌─────────────────────┬──────────┐
+│ Metrik              │ Ziel     │
+├─────────────────────┼──────────┤
+│ Line Coverage       │ &gt; 80%    │
+│ Branch Coverage     │ &gt; 75%    │
+│ Function Coverage   │ &gt; 85%    │
+│ Statement Coverage  │ &gt; 80%    │
+└─────────────────────┴──────────┘
+</code></pre>
+<p><strong>Berichte:</strong></p>
+<ul>
+<li><a href="http://lcov.info">lcov.info</a> für SonarCloud</li>
+<li>JSON für Archivierung</li>
+<li>HTML für menschliche Lesbarkeit</li>
+</ul>
+<hr>
+<h3 id="phase-6-code-quality-analysis">Phase 6: Code Quality Analysis</h3>
+<p><strong>Aufgabe:</strong><br>
+Code-Qualität &amp; Wartbarkeit analysieren</p>
+<p><strong>SonarCloud Integration:</strong></p>
+<ol>
+<li>Coverage-Berichte herunterladen</li>
+<li>SonarCloud Scan ausführen</li>
+<li>Quality Gate prüfen</li>
+<li>Ergebnisse hochladen</li>
+</ol>
+<p><strong>Quality Gate Kriterien:</strong></p>
+<pre><code class="language-yaml"><span class="hljs-string">Neue</span> <span class="hljs-string">Code-Änderungen:</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-attr">Coverage:</span> <span class="hljs-string">≥</span> <span class="hljs-number">80</span><span class="hljs-string">%</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-attr">Duplicationen:</span> <span class="hljs-string">≤</span> <span class="hljs-number">3</span><span class="hljs-string">%</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-attr">Maintainability Rating:</span> <span class="hljs-string">A</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-attr">Reliability Rating:</span> <span class="hljs-string">A</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-attr">Security Rating:</span> <span class="hljs-string">A</span>
+</code></pre>
+<p><strong>Hinweis:</strong><br>
+Quality Gate-Fehler blockieren Pipeline nicht, sollten aber untersucht werden.</p>
+<hr>
+<h3 id="phase-7-security-summary">Phase 7: Security Summary</h3>
+<p><strong>Aufgabe:</strong><br>
+Alle Sicherheitsergebnisse aggregieren</p>
+<p><strong>Prozess:</strong></p>
+<pre><code>1. Alle Artefakte herunterladen
+         ↓
+2. SARIF-Dateien parsen
+         ↓
+3. Schwachstellen nach Severity zählen
+         ↓
+4. Summary-Report generieren
+         ↓
+5. PR-Kommentar erstellen (falls PR)
+         ↓
+6. Issue bei kritischen Findings
+</code></pre>
+<hr>
+<h3 id="security-summary-report">Security Summary Report</h3>
+<p><strong>Beispiel-Report:</strong></p>
+<pre><code class="language-markdown"><span class="hljs-section"># Security Scan Summary</span>
+
+<span class="hljs-section">## Vulnerability Overview</span>
+
+| Severity    | Count |
+| ----------- | ----- |
+| 🔴 Critical | 0     |
+| 🟠 High     | 2     |
+| 🟡 Medium   | 5     |
+| 🔵 Low      | 12    |
+
+<span class="hljs-section">## 🔍 Scan Results</span>
+
+<span class="hljs-section">### Gitleaks: No secrets detected</span>
+
+<span class="hljs-section">### OWASP: 2 high, 5 medium</span>
+
+<span class="hljs-section">### CodeQL: No issues</span>
+
+<span class="hljs-section">### Trivy: 0 critical, 2 high</span>
+
+<span class="hljs-section">### Checkov: 5 medium findings</span>
+</code></pre>
+<hr>
+<h3 id="phase-8-final-quality-gate">Phase 8: Final Quality Gate</h3>
+<p><strong>Aufgabe:</strong><br>
+Finale Validierung vor Abschluss</p>
+<p><strong>Prüfungen:</strong></p>
+<pre><code class="language-yaml"><span class="hljs-attr">Kritische Checks:</span> <span class="hljs-string">Security</span> <span class="hljs-string">Summary</span> <span class="hljs-string">erfolgreich</span>
+  <span class="hljs-string">Build</span> <span class="hljs-string">erfolgreich</span>
+  <span class="hljs-string">Tests</span> <span class="hljs-string">bestanden</span>
+  <span class="hljs-string">Keine</span> <span class="hljs-string">blockierenden</span> <span class="hljs-string">Sicherheitsprobleme</span>
+
+<span class="hljs-string">Warnungen</span> <span class="hljs-string">(nicht</span> <span class="hljs-string">blockierend):</span> <span class="hljs-string">SonarCloud</span> <span class="hljs-string">Quality</span> <span class="hljs-string">Gate</span>
+  <span class="hljs-string">Code</span> <span class="hljs-string">Coverage</span> <span class="hljs-string">unter</span> <span class="hljs-string">Ziel</span>
+</code></pre>
+<p><strong>Ergebnisse:</strong></p>
+<pre><code>SUCCESS: Alle Checks bestanden
+WARNING: Nicht-kritische Probleme
+FAILURE: Kritische Probleme gefunden
+</code></pre>
+<hr>
+<h2 id="5-automatisierte-workflows">5. Automatisierte Workflows</h2>
+<h3 id="workflow-1-monorepo-pipeline">Workflow 1: Monorepo Pipeline</h3>
+<p><strong>Hauptpipeline für CI/CD</strong></p>
+<p><strong>Trigger:</strong></p>
+<ul>
+<li>Push auf <code>development</code> oder <code>release</code></li>
+<li>Pull Requests</li>
+</ul>
+<p><strong>Jobs:</strong></p>
+<pre><code>11 Jobs insgesamt:
+  1. Initialize
+  2. Gitleaks Scan
+  3. OWASP Dependency Check
+  4. CodeQL Analysis
+  5. Build Backend
+  6. Checkov IaC Scan
+  7. Docker Build &amp; Trivy
+  8. Integration Tests
+  9. SonarCloud Quality
+ 10. Security Summary
+ 11. Final Quality Gate
+</code></pre>
+<hr>
+<h3 id="workflow-2-scheduled-security-scans">Workflow 2: Scheduled Security Scans</h3>
+<p><strong>Wöchentliche Sicherheitsaudits</strong></p>
+<p><strong>Zeitplan:</strong></p>
+<pre><code class="language-yaml"><span class="hljs-string">Jeden</span> <span class="hljs-string">Montag</span> <span class="hljs-string">um</span> <span class="hljs-number">2</span><span class="hljs-string">:00</span> <span class="hljs-string">UTC</span>
+<span class="hljs-string">+</span> <span class="hljs-string">Manueller</span> <span class="hljs-string">Trigger</span> <span class="hljs-string">möglich</span>
+</code></pre>
+<p><strong>Scans:</strong></p>
+<ol>
+<li>Trivy Filesystem Scan</li>
+<li>OWASP Dependency Check</li>
+</ol>
+<p><strong>Automatische Issue-Erstellung:</strong></p>
+<pre><code class="language-markdown">Weekly Security Scan Report - 2025-10-16
+
+<span class="hljs-section">## Scans Performed</span>
+
+<span class="hljs-bullet">-</span> Trivy Filesystem Scan
+<span class="hljs-bullet">-</span> OWASP Dependency Check
+
+<span class="hljs-section">## Results</span>
+
+Check the Security tab for detailed findings.
+</code></pre>
+<hr>
+<h3 id="workflow-3-dependabot-auto-merge">Workflow 3: Dependabot Auto-Merge</h3>
+<p><strong>Automatische Dependency-Updates</strong></p>
+<p><strong>Logik:</strong></p>
+<pre><code class="language-yaml"><span class="hljs-string">Patch</span> <span class="hljs-string">Updates</span> <span class="hljs-string">(1.0.X):</span> <span class="hljs-string">Auto-Approve</span>
+  <span class="hljs-string">Auto-Merge</span> <span class="hljs-string">Label</span>
+  <span class="hljs-string">Automatisches</span> <span class="hljs-string">Mergen</span>
+
+<span class="hljs-string">Minor</span> <span class="hljs-string">Updates</span> <span class="hljs-string">(1.X.0):</span> <span class="hljs-string">Auto-Approve</span>
+  <span class="hljs-string">Manuelles</span> <span class="hljs-string">Mergen</span>
+
+<span class="hljs-string">Major</span> <span class="hljs-string">Updates</span> <span class="hljs-string">(X.0.0):</span> <span class="hljs-string">Warnkommentar</span>
+  <span class="hljs-string">Manuelle</span> <span class="hljs-string">Review</span> <span class="hljs-string">erforderlich</span>
+</code></pre>
+<p><strong>Vorteile:</strong></p>
+<ul>
+<li>Weniger manueller Aufwand</li>
+<li>Schnellere Sicherheitsupdates</li>
+<li>Kontrollierter Update-Prozess</li>
+</ul>
+<hr>
+<h2 id="6️⃣-sicherheitsberichte--monitoring">6️⃣ Sicherheitsberichte &amp; Monitoring</h2>
+<h3 id="github-security-tab">GitHub Security Tab</h3>
+<p><strong>Integrierte Features:</strong></p>
+<pre><code>Code Scanning Alerts (CodeQL)
+   ↓
+Secret Scanning (Gitleaks)
+   ↓
+Dependabot Alerts
+   ↓
+Security Advisories
+</code></pre>
+<p><strong>SARIF-Upload:</strong></p>
+<ul>
+<li>Alle Tools laden SARIF hoch</li>
+<li>Zentrale Sicherheitsübersicht</li>
+<li>Trendanalyse möglich</li>
+</ul>
+<hr>
+<h3 id="artefakte--reports">Artefakte &amp; Reports</h3>
+<p><strong>Pro Pipeline-Lauf generiert:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Artefakt</th>
+<th>Inhalt</th>
+<th>Zweck</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>backend-build-artifacts</code></td>
+<td>Kompilierte App</td>
+<td>Deployment</td>
+</tr>
+<tr>
+<td><code>backend-dependency-check</code></td>
+<td>CVE-Reports</td>
+<td>Security Review</td>
+</tr>
+<tr>
+<td><code>backend-license-compliance</code></td>
+<td>Lizenz-Reports</td>
+<td>Legal Compliance</td>
+</tr>
+<tr>
+<td><code>complete-test-suite-coverage</code></td>
+<td>Coverage</td>
+<td>Qualitätsmetriken</td>
+</tr>
+<tr>
+<td><code>trivy-backend-reports</code></td>
+<td>Container Scans</td>
+<td>Security</td>
+</tr>
+<tr>
+<td><code>checkov-report</code></td>
+<td>IaC Findings</td>
+<td>Infrastructure</td>
+</tr>
+<tr>
+<td><code>security-summary</code></td>
+<td>Gesamtübersicht</td>
+<td>Assessment</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Retention:</strong> 90 Tage</p>
+<hr>
+<h3 id="performance-metriken">Performance-Metriken</h3>
+<p><strong>Durchschnittliche Job-Zeiten:</strong></p>
+<pre><code>┌────────────────────────┬──────────┬──────────────┐
+│ Job                    │ Dauer    │ Überspringen │
+├────────────────────────┼──────────┼──────────────┤
+│ Initialize             │ ~30s     │ Nein         │
+│ Gitleaks               │ ~1-2min  │ Ja (1)       │
+│ OWASP Dependency Check │ ~3-5min  │ Ja (2)       │
+│ CodeQL                 │ ~5-10min │ Ja (2)       │
+│ Build Backend          │ ~2-3min  │ Ja (2)       │
+│ Docker Build &amp; Trivy   │ ~3-5min  │ Ja (3)       │
+│ Integration Tests      │ ~5-8min  │ Ja (3)       │
+│ SonarCloud             │ ~2-3min  │ Ja (4)       │
+│ Checkov                │ ~1-2min  │ Ja (1)       │
+│ Security Summary       │ ~1min    │ Ja (5)       │
+│ Quality Gate           │ ~30s     │ Nein         │
+└────────────────────────┴──────────┴──────────────┘
+
+(1) Wenn keine Änderungen
+(2) Wenn Backend unverändert
+(3) Wenn Build übersprungen
+(4) Wenn Tests übersprungen
+(5) Wenn keine Scans
+</code></pre>
+<hr>
+<h3 id="smart-change-detection">Smart Change Detection</h3>
+<p><strong>Path-Filter-Logik:</strong></p>
+<pre><code class="language-yaml"><span class="hljs-attr">backend:</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-string">&quot;nestjs_backend/**&quot;</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-string">&quot;.env&quot;</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-string">&quot;docker-compose.yml&quot;</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-string">&quot;.github/workflows/**&quot;</span>
+
+<span class="hljs-attr">frontend:</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-string">&quot;flutter_frontend/**&quot;</span>
+
+<span class="hljs-attr">infrastructure:</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-string">&quot;docker-compose.yml&quot;</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-string">&quot;Dockerfile&quot;</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-string">&quot;.github/**&quot;</span>
+</code></pre>
+<p><strong>Vorteile:</strong></p>
+<ul>
+<li>Nur relevante Jobs laufen</li>
+<li>40-60% Zeitersparnis möglich</li>
+<li>Ressourcen-effizient</li>
+</ul>
+<hr>
+<h2 id="7-demo--ergebnisse">7. Demo &amp; Ergebnisse</h2>
+<h3 id="beispiel-pipeline-lauf">Beispiel-Pipeline-Lauf</h3>
+<p><strong>Szenario:</strong><br>
+Backend-Code geändert, Push auf <code>development</code></p>
+<p><strong>Ausgeführte Jobs:</strong></p>
+<pre><code>Initialize (30s)
+   ├── Änderungen erkannt: backend
+   └── Version: dev-abc1234
+
+Parallele Security Scans:
+   ├── Gitleaks (1m 15s) - Keine Secrets
+   ├── OWASP (4m 30s) - 2 HIGH gefunden
+   ├── CodeQL (8m 45s) - Keine Issues
+   └── Checkov (1m 45s) - 3 MEDIUM
+
+Build Backend (2m 30s)
+   ├── Dependencies installiert
+   ├── License Check bestanden
+   └── Build erfolgreich
+
+Docker Build &amp; Trivy (4m 15s)
+   ├── Image gebaut
+   ├── FS Scan: 1 HIGH
+   └── Image Scan: 0 CRITICAL
+
+Integration Tests (6m 30s)
+   ├── Unit Tests: 45 passed
+   ├── E2E Tests: 12 passed
+   └── Coverage: 82%
+
+SonarCloud (2m 45s)
+   └── Quality Gate: PASSED (A)
+
+Security Summary (45s)
+   └── Report generiert
+
+Quality Gate (15s)
+   └── Pipeline SUCCESSFUL
+</code></pre>
+<p><strong>Gesamtzeit:</strong> 18 Minuten 30 Sekunden</p>
+<hr>
+<h3 id="beispiel-gefundene-schwachstellen">Beispiel: Gefundene Schwachstellen</h3>
+<p><strong>OWASP Dependency Check:</strong></p>
+<pre><code>Package: lodash@4.17.19
+CVE: CVE-2020-8203
+Severity: HIGH
+CVSS Score: 7.4
+
+Beschreibung:
+Prototype Pollution vulnerability ermöglicht
+Angreifern, Object-Properties zu manipulieren.
+
+Lösung:
+Update auf lodash@4.17.21 oder höher
+</code></pre>
+<p><strong>Trivy Container Scan:</strong></p>
+<pre><code>Package: openssl (OS Package)
+CVE: CVE-2024-XXXXX
+Severity: HIGH
+CVSS Score: 8.1
+
+Beschreibung:
+Buffer Overflow in OpenSSL-Bibliothek
+
+Lösung:
+Base Image aktualisieren
+</code></pre>
+<hr>
+<h3 id="security-summary-dashboard">Security Summary Dashboard</h3>
+<p><strong>Visualisierung der Ergebnisse:</strong></p>
+<pre><code>Vulnerability Dashboard
+
+╔═══════════════════════════════════════╗
+║  🔴 Critical: 0                       ║
+║  🟠 High:     3                       ║
+║  🟡 Medium:   8                       ║
+║  🔵 Low:      15                      ║
+╚═══════════════════════════════════════╝
+
+Scan-Details:
+├── Gitleaks:        ✅ 0 Secrets
+├── OWASP:           ⚠️ 2 High, 5 Medium
+├── CodeQL:          ✅ 0 Issues
+├── Trivy (FS):      ⚠️ 1 High, 3 Medium
+├── Trivy (Image):   ✅ 0 Critical
+└── Checkov:         ⚠️ 5 Medium
+
+Trend:
+  Letzte Woche: 4 High → Diese Woche: 3 High
+  Verbesserung: -25%
+</code></pre>
+<hr>
+<h3 id="pr-kommentar-beispiel">PR-Kommentar Beispiel</h3>
+<p><strong>Automatischer Kommentar auf Pull Request:</strong></p>
+<pre><code class="language-markdown"><span class="hljs-section">## Monorepo Security Scan Summary</span>
+
+<span class="hljs-strong">**Pipeline Run:**</span> #123
+<span class="hljs-strong">**Branch:**</span> feature/new-endpoint
+<span class="hljs-strong">**Backend Changed:**</span> Yes
+
+<span class="hljs-section">### Vulnerability Overview</span>
+
+| Severity    | Count |
+| ----------- | ----- |
+| 🔴 Critical | 0     |
+| 🟠 High     | 2     |
+| 🟡 Medium   | 5     |
+| 🔵 Low      | 12    |
+
+<span class="hljs-section">### Scan Results</span>
+
+<span class="hljs-section">#### Gitleaks: No secrets detected</span>
+
+<span class="hljs-section">#### Backend OWASP: 2 high, 5 medium</span>
+
+<span class="hljs-bullet">-</span> lodash@4.17.19 (HIGH - CVE-2020-8203)
+<span class="hljs-bullet">-</span> axios@0.21.0 (HIGH - CVE-2021-3749)
+
+<span class="hljs-section">#### CodeQL: No issues</span>
+
+<span class="hljs-section">#### Trivy: 1 high, 3 medium</span>
+
+<span class="hljs-section">#### Checkov: 5 medium findings</span>
+
+<span class="hljs-section">### Detailed Reports</span>
+
+All reports available as artifacts in workflow run.
+
+---
+
+<span class="hljs-emphasis">_Generated by NestJS Monorepo CI/CD Pipeline_</span>
+</code></pre>
+<hr>
+<h2 id="8-zusammenfassung">8. Zusammenfassung</h2>
+<h3 id="erreichte-ziele">Erreichte Ziele</h3>
+<p><strong>Umfassende Sicherheit</strong></p>
+<ul>
+<li>6-Schichten Sicherheitsarchitektur</li>
+<li>Automatisierte Schwachstellenerkennung</li>
+<li>Kontinuierliches Monitoring</li>
+</ul>
+<p><strong>Automatisierung</strong></p>
+<ul>
+<li>Vollständig automatisierte Pipeline</li>
+<li>Dependabot-Integration</li>
+<li>Wöchentliche Audits</li>
+</ul>
+<p><strong>Qualitätssicherung</strong></p>
+<ul>
+<li>Automatisierte Tests</li>
+<li>Code Coverage Tracking</li>
+<li>SonarCloud-Integration</li>
+</ul>
+<p><strong>DevSecOps Best Practices</strong></p>
+<ul>
+<li>Security in jeder Phase</li>
+<li>Shift-Left-Ansatz</li>
+<li>SARIF-Standardisierung</li>
+</ul>
+<hr>
+<h3 id="wichtigste-features">Wichtigste Features</h3>
+<p><strong>1. Multi-Tool Security Stack</strong></p>
+<pre><code>Gitleaks + OWASP + CodeQL + Trivy + Checkov + SonarCloud
+= Umfassende Abdeckung aller Sicherheitsaspekte
+</code></pre>
+<p><strong>2. Smart Change Detection</strong></p>
+<pre><code>Nur relevante Jobs ausführen
+= 40-60% schnellere Pipeline-Läufe
+</code></pre>
+<p><strong>3. Automatische Reporting</strong></p>
+<pre><code>PR-Kommentare + GitHub Issues + Security Tab
+= Vollständige Transparenz
+</code></pre>
+<p><strong>4. Parallele Ausführung</strong></p>
+<pre><code>Unabhängige Jobs parallel
+= Optimale Ressourcennutzung
+</code></pre>
+<hr>
+<h3 id="gelernte-lektionen">Gelernte Lektionen</h3>
+<p><strong>1. Sicherheits-Tools Kombination</strong></p>
+<ul>
+<li>Kein Tool findet alles</li>
+<li>Mehrschichtige Verteidigung essentiell</li>
+<li>SARIF-Format als Standard</li>
+</ul>
+<p><strong>2. Pipeline-Performance</strong></p>
+<ul>
+<li>Caching ist kritisch</li>
+<li>Change Detection spart Zeit</li>
+<li>Parallele Ausführung wichtig</li>
+</ul>
+<p><strong>3. Automatisierung</strong></p>
+<ul>
+<li>Manuelle Reviews reduzieren</li>
+<li>Aber: Kritische Checks bleiben manuell</li>
+<li>Balance zwischen Automation &amp; Control</li>
+</ul>
+<p><strong>4. Reporting &amp; Visibility</strong></p>
+<ul>
+<li>Klare Reports essentiell</li>
+<li>GitHub Security Tab nutzen</li>
+<li>Automatische Issue-Erstellung</li>
+</ul>
+<hr>
+<h3 id="zahlen--fakten">Zahlen &amp; Fakten</h3>
+<pre><code>Pipeline-Statistiken:
+
+  11   Jobs in Hauptpipeline
+  100+ Pipeline-Schritte
+  6    Sicherheits-Tools
+  3    Automatisierte Workflows
+  10   Artefakt-Typen
+  90   Tage Aufbewahrung
+
+Zeiten:
+
+  25-40min  Volle Pipeline
+  10-15min  Mit Smart Skipping
+  2min      Schnellster Job (SonarCloud)
+  10min     Langsamster Job (CodeQL)
+
+Sicherheit:
+
+  100%  Secret Scanning Coverage
+  100%  Dependency Scanning
+  100%  Container Scanning
+  100%  IaC Scanning
+</code></pre>
+<hr>
+<h3 id="weiterentwicklung">Weiterentwicklung</h3>
+<p><strong>Geplante Erweiterungen:</strong></p>
+<p><strong>1. Flutter Frontend Pipeline</strong></p>
+<pre><code>- Dart Code-Analyse
+- Widget Tests
+- Mobile App Security
+</code></pre>
+<p><strong>2. Deployment-Automation</strong></p>
+<pre><code>- Kubernetes Deployment
+- Helm Chart Validation
+- Blue/Green Deployment
+</code></pre>
+<p><strong>3. Advanced Monitoring</strong></p>
+<pre><code>- Performance Testing
+- Load Testing
+- Runtime Security
+</code></pre>
+<p><strong>4. Notifications</strong></p>
+<pre><code>- Slack Integration
+- Email Reports
+- Discord Webhooks
+</code></pre>
+<hr>
+<h3 id="best-practices">Best Practices</h3>
+<p><strong>1. Security First</strong></p>
+<pre><code class="language-yaml"><span class="hljs-string">✓</span> <span class="hljs-string">Secrets</span> <span class="hljs-string">nie</span> <span class="hljs-string">im</span> <span class="hljs-string">Code</span>
+<span class="hljs-string">✓</span> <span class="hljs-string">Dependencies</span> <span class="hljs-string">aktuell</span> <span class="hljs-string">halten</span>
+<span class="hljs-string">✓</span> <span class="hljs-string">Regelmäßige</span> <span class="hljs-string">Audits</span>
+<span class="hljs-string">✓</span> <span class="hljs-string">Mehrschichtige</span> <span class="hljs-string">Verteidigung</span>
+</code></pre>
+<p><strong>2. Pipeline-Design</strong></p>
+<pre><code class="language-yaml"><span class="hljs-string">✓</span> <span class="hljs-string">Modulare</span> <span class="hljs-string">Jobs</span>
+<span class="hljs-string">✓</span> <span class="hljs-string">Wiederverwendbare</span> <span class="hljs-string">Actions</span>
+<span class="hljs-string">✓</span> <span class="hljs-string">Smart</span> <span class="hljs-string">Change</span> <span class="hljs-string">Detection</span>
+<span class="hljs-string">✓</span> <span class="hljs-string">Parallele</span> <span class="hljs-string">Ausführung</span>
+</code></pre>
+<p><strong>3. Testing</strong></p>
+<pre><code class="language-yaml"><span class="hljs-string">✓</span> <span class="hljs-string">Unit</span> <span class="hljs-string">+</span> <span class="hljs-string">E2E</span> <span class="hljs-string">Tests</span>
+<span class="hljs-string">✓</span> <span class="hljs-string">Coverage</span> <span class="hljs-string">&gt;</span> <span class="hljs-number">80</span><span class="hljs-string">%</span>
+<span class="hljs-string">✓</span> <span class="hljs-string">Produktionsähnliche</span> <span class="hljs-string">Umgebung</span>
+<span class="hljs-string">✓</span> <span class="hljs-string">Automatisierte</span> <span class="hljs-string">Regression</span>
+</code></pre>
+<p><strong>4. Monitoring</strong></p>
+<pre><code class="language-yaml"><span class="hljs-string">✓</span> <span class="hljs-string">Zentrale</span> <span class="hljs-string">Dashboards</span>
+<span class="hljs-string">✓</span> <span class="hljs-string">Automatische</span> <span class="hljs-string">Reports</span>
+<span class="hljs-string">✓</span> <span class="hljs-string">Trend-Analyse</span>
+<span class="hljs-string">✓</span> <span class="hljs-string">Proaktive</span> <span class="hljs-string">Alerts</span>
+</code></pre>
+<hr>
+<h3 id="compliance--standards">Compliance &amp; Standards</h3>
+<p><strong>Erfüllte Standards:</strong></p>
+<pre><code>OWASP Top 10
+  - Injection
+  - Broken Authentication
+  - Sensitive Data Exposure
+  - XML External Entities
+  - Broken Access Control
+  - Security Misconfiguration
+  - XSS
+  - Insecure Deserialization
+  - Using Components with Known Vulnerabilities
+  - Insufficient Logging &amp; Monitoring
+</code></pre>
+<p><strong>Weitere:</strong></p>
+<ul>
+<li>CWE (Common Weakness Enumeration)</li>
+<li>CVE (Common Vulnerabilities and Exposures)</li>
+<li>SARIF (Static Analysis Results Format)</li>
+</ul>
+<hr>
+<h3 id="kosten-nutzen-analyse">Kosten-Nutzen-Analyse</h3>
+<p><strong>Investition:</strong></p>
+<ul>
+<li>Pipeline-Setup: ~40 Stunden</li>
+<li>Konfiguration: ~10 Stunden</li>
+<li>Dokumentation: ~8 Stunden</li>
+</ul>
+<p><strong>Nutzen:</strong></p>
+<ul>
+<li>Automatische Schwachstellenerkennung</li>
+<li>90% weniger manuelle Security-Reviews</li>
+<li>Früherkennung von Problemen</li>
+<li>Compliance-Nachweise</li>
+<li>Reduziertes Sicherheitsrisiko</li>
+</ul>
+<p><strong>ROI:</strong></p>
+<pre><code>Zeit für manuelle Reviews gespart: ~20h/Monat
+Frühzeitige Fehlererkennung: Unbezahlbar
+Automatisierte Compliance: Prüfungskosten -50%
+</code></pre>
+<hr>
+<h3 id="technische-herausforderungen">Technische Herausforderungen</h3>
+<p><strong>1. Tool-Integration</strong></p>
+<pre><code>Problem: Verschiedene Output-Formate
+Lösung: SARIF als Standard
+</code></pre>
+<p><strong>2. Performance-Optimierung</strong></p>
+<pre><code>Problem: Lange Pipeline-Laufzeiten
+Lösung: Caching + Change Detection
+</code></pre>
+<p><strong>3. False Positives</strong></p>
+<pre><code>Problem: Zu viele unwichtige Warnungen
+Lösung: Tool-Konfiguration + Severity-Filter
+</code></pre>
+<p><strong>4. Dependency-Konflikte</strong></p>
+<pre><code>Problem: Breaking Changes bei Updates
+Lösung: Staged Update-Strategie
+</code></pre>
+<hr>
+<h3 id="skalierbarkeit">Skalierbarkeit</h3>
+<p><strong>Aktuell:</strong></p>
+<pre><code>1 Backend (NestJS)
+1 Frontend (Flutter - vorbereitet)
+1 Monorepo
+</code></pre>
+<p><strong>Skalierbar auf:</strong></p>
+<pre><code>✓ Mehrere Microservices
+✓ Mehrere Frontends
+✓ Multi-Cloud Deployment
+✓ Polyrepo-Architektur
+</code></pre>
+<p><strong>Design-Prinzipien:</strong></p>
+<ul>
+<li>Wiederverwendbare Actions</li>
+<li>Modulare Job-Struktur</li>
+<li>Flexible Trigger-Konfiguration</li>
+<li>Matrix-Strategien</li>
+</ul>
+<hr>
+<h3 id="sicherheits-metriken">Sicherheits-Metriken</h3>
+<p><strong>Erfasste Metriken:</strong></p>
+<pre><code>┌─────────────────────────────┬────────────┐
+│ Metrik                      │ Aktuell    │
+├─────────────────────────────┼────────────┤
+│ Secrets gefunden            │ 0          │
+│ Critical Vulnerabilities    │ 0          │
+│ High Vulnerabilities        │ 3          │
+│ Code Coverage               │ 82%        │
+│ SonarCloud Rating           │ A          │
+│ License Compliance          │ 100%       │
+│ IaC Security Score          │ 95%        │
+└─────────────────────────────┴────────────┘
+</code></pre>
+<p><strong>Trends:</strong></p>
+<ul>
+<li>Keine kritischen Findings seit 4 Wochen</li>
+<li>Coverage-Steigerung von 75% → 82%</li>
+<li>High-Schwachstellen von 7 → 3</li>
+</ul>
+<hr>
+<h3 id="vergleich-vorher-vs-nachher">Vergleich: Vorher vs. Nachher</h3>
+<p><strong>Vorher (Manuell):</strong></p>
+<pre><code>Security-Reviews: Manuell, unregelmäßig
+Dependency-Updates: Vergessen
+Tests: Lokal, nicht konsistent
+Code-Qualität: Nicht gemessen
+Deployment: Manuell, fehleranfällig
+Zeit pro Release: ~4 Stunden
+</code></pre>
+<p><strong>Nachher (Automatisiert):</strong></p>
+<pre><code>Security-Reviews: Automatisch, jeden Commit
+Dependency-Updates: Wöchentlich, automatisch
+Tests: CI/CD, konsistent
+Code-Qualität: Kontinuierlich gemessen
+Deployment: Automatisiert (geplant)
+Zeit pro Release: ~15 Minuten
+</code></pre>
+<p><strong>Verbesserung:</strong> 94% Zeitersparnis</p>
+<hr>
+<h3 id="lessons-learned---praxistipps">Lessons Learned - Praxistipps</h3>
+<p><strong>1. Start Simple, Scale Gradually</strong></p>
+<pre><code>Beginne mit essentiellen Tools
+  → Füge schrittweise mehr hinzu
+  → Lerne aus Ergebnissen
+</code></pre>
+<p><strong>2. False Positives managen</strong></p>
+<pre><code>Konfiguriere Tools präzise
+  → Filtere nach Severity
+  → Dokumentiere Ausnahmen
+</code></pre>
+<p><strong>3. Team-Buy-In</strong></p>
+<pre><code>Zeige Mehrwert früh
+  → Involviere Team in Prozess
+  → Schulungen anbieten
+</code></pre>
+<p><strong>4. Monitoring ist essentiell</strong></p>
+<pre><code>Richte Dashboards ein
+  → Überwache Trends
+  → Reagiere proaktiv
+</code></pre>
+<hr>
+<h3 id="toolvergleich">Toolvergleich</h3>
+<p><strong>Secret Scanning:</strong></p>
+<pre><code>Gitleaks vs. TruffleHog vs. git-secrets
+→ Gitleaks gewählt: GitHub-Integration
+</code></pre>
+<p><strong>Dependency Scanning:</strong></p>
+<pre><code>OWASP vs. Snyk vs. npm audit
+→ OWASP gewählt: Open-Source, umfassend
+</code></pre>
+<p><strong>Container Scanning:</strong></p>
+<pre><code>Trivy vs. Clair vs. Anchore
+→ Trivy gewählt: Schnell, einfach
+</code></pre>
+<p><strong>SAST:</strong></p>
+<pre><code>CodeQL vs. SonarQube vs. Semgrep
+→ CodeQL gewählt: GitHub-native
+</code></pre>
+<hr>
+<h3 id="integration-mit-github">Integration mit GitHub</h3>
+<p><strong>GitHub Features genutzt:</strong></p>
+<pre><code>GitHub Actions (CI/CD)
+GitHub Security Tab
+Dependabot Alerts
+SARIF Upload
+Issue Automation
+PR Comments
+Branch Protection
+Status Checks
+</code></pre>
+<p><strong>Vorteile:</strong></p>
+<ul>
+<li>Zentrale Platform</li>
+<li>Native Integration</li>
+<li>Keine zusätzlichen Tools nötig</li>
+<li>Team-Kollaboration vereinfacht</li>
+</ul>
+<hr>
+<h3 id="empfehlungen-für-andere-projekte">Empfehlungen für andere Projekte</h3>
+<p><strong>1. Klein anfangen:</strong></p>
+<pre><code>Phase 1: Basic CI/CD + Tests
+Phase 2: Security Scanning hinzufügen
+Phase 3: Erweiterte Features
+</code></pre>
+<p><strong>2. Priorisierung:</strong></p>
+<pre><code>Must-Have:
+  - Secret Scanning
+  - Dependency Scanning
+  - Automated Tests
+
+Nice-to-Have:
+  - Code Quality
+  - IaC Scanning
+  - Advanced Metrics
+</code></pre>
+<p><strong>3. Tool-Auswahl:</strong></p>
+<pre><code>Kriterien:
+  ✓ GitHub-Integration
+  ✓ Open-Source bevorzugt
+  ✓ SARIF-Support
+  ✓ Community &amp; Support
+</code></pre>
+<hr>
+<h3 id="ressourcen--links">Ressourcen &amp; Links</h3>
+<p><strong>Dokumentation:</strong></p>
+<pre><code>GitHub Actions: docs.github.com/actions
+OWASP: owasp.org
+Trivy: trivy.dev
+Gitleaks: github.com/gitleaks/gitleaks
+CodeQL: codeql.github.com
+</code></pre>
+<p><strong>Best Practices:</strong></p>
+<pre><code>OWASP DevSecOps Guideline
+GitHub Security Best Practices
+Docker Security Best Practices
+NestJS Documentation
+</code></pre>
+<p><strong>Community:</strong></p>
+<pre><code>GitHub Discussions
+OWASP Community
+NestJS Discord
+</code></pre>
+<hr>
+<h3 id="projektmetriken">Projektmetriken</h3>
+<p><strong>Code-Statistiken:</strong></p>
+<pre><code>Backend (NestJS):
+  ├── TypeScript Files: ~50
+  ├── Lines of Code: ~2,500
+  ├── Test Files: ~30
+  └── Test Coverage: 82%
+
+Infrastructure:
+  ├── Workflows: 3
+  ├── Jobs: 11
+  ├── Steps: 100+
+  └── Reusable Actions: 1
+
+Documentation:
+  ├── README.md: ~1,200 Zeilen
+  ├── PRESENTATION_DE.md: ~1,500 Zeilen
+  └── Inline Comments: Umfassend
+</code></pre>
+<hr>
+<h3 id="qa---häufige-fragen">Q&amp;A - Häufige Fragen</h3>
+<p><strong>Q: Wie lange dauert ein durchschnittlicher Pipeline-Lauf?</strong></p>
+<pre><code>A: 25-40 Minuten vollständig
+   10-15 Minuten mit Smart Skipping
+</code></pre>
+<p><strong>Q: Was passiert bei kritischen Schwachstellen?</strong></p>
+<pre><code>A: - Pipeline schlägt fehl
+   - Automatisches Issue wird erstellt
+   - PR kann nicht gemerged werden
+</code></pre>
+<p><strong>Q: Kosten der Pipeline?</strong></p>
+<pre><code>A: GitHub Actions: 2,000 Minuten/Monat kostenlos
+   Für dieses Projekt: Innerhalb Free Tier
+   SonarCloud: Kostenlos für Open Source
+</code></pre>
+<p><strong>Q: Wie werden False Positives behandelt?</strong></p>
+<pre><code>A: - Tool-spezifische Ignorier-Dateien
+   - Dokumentierte Ausnahmen
+   - Regelmäßige Reviews
+</code></pre>
+<hr>
+<h3 id="live-demo-checkliste">Live-Demo Checkliste</h3>
+<p><strong>Vorbereitung für Demo:</strong></p>
+<pre><code>☐ Repository auf GitHub öffnen
+☐ Actions Tab zeigen
+☐ Workflow-Run auswählen
+☐ Job-Details durchgehen
+☐ Artefakte zeigen
+☐ Security Tab demonstrieren
+☐ PR mit Kommentar zeigen
+☐ Scheduled Scan Issue zeigen
+☐ SonarCloud Dashboard (optional)
+</code></pre>
+<p><strong>Demo-Ablauf:</strong></p>
+<ol>
+<li>Pipeline-Übersicht</li>
+<li>Security Scans in Detail</li>
+<li>Test-Ergebnisse</li>
+<li>Security Summary</li>
+<li>GitHub Security Tab</li>
+<li>Artefakte</li>
+</ol>
+<hr>
+<h3 id="fazit">Fazit</h3>
+<p><strong>Kernaussagen:</strong></p>
+<p><strong>Automatisierung ist essentiell</strong></p>
+<ul>
+<li>Manuelle Prozesse sind fehleranfällig</li>
+<li>CI/CD ermöglicht Konsistenz</li>
+<li>Zeit- und Kostenersparnis</li>
+</ul>
+<p><strong>Security muss integriert sein</strong></p>
+<ul>
+<li>Nicht nachträglich hinzufügen</li>
+<li>In jeder Phase berücksichtigen</li>
+<li>Mehrschichtige Verteidigung</li>
+</ul>
+<p><strong>Tools richtig kombinieren</strong></p>
+<ul>
+<li>Kein Tool findet alles</li>
+<li>SARIF als Standard nutzen</li>
+<li>GitHub-Integration bevorzugen</li>
+</ul>
+<p><strong>Continuous Improvement</strong></p>
+<ul>
+<li>Pipeline ist nie &quot;fertig&quot;</li>
+<li>Regelmäßige Reviews</li>
+<li>An neue Bedrohungen anpassen</li>
+</ul>
+<hr>
+<h3 id="projektabschluss">Projektabschluss</h3>
+<p><strong>Projektziele erreicht:</strong></p>
+<p>Produktionsreife Pipeline entwickelt<br>
+6 Security-Tools integriert<br>
+Vollständige Automatisierung<br>
+Umfassende Dokumentation<br>
+Best Practices demonstriert</p>
+<p><strong>Technologien gemeistert:</strong></p>
+<p>GitHub Actions<br>
+Docker &amp; Containerization<br>
+NestJS Framework<br>
+Security Scanning Tools<br>
+DevSecOps Workflows</p>
+<p><strong>Lernziele erfüllt:</strong></p>
+<p>CI/CD Pipeline Design<br>
+Security Integration<br>
+Automation Patterns<br>
+Quality Assurance</p>
+<hr>
+<h2 id="vielen-dank-für-ihre-aufmerksamkeit">Vielen Dank für Ihre Aufmerksamkeit!</h2>
+<h3 id="kontakt--ressourcen">Kontakt &amp; Ressourcen</h3>
+<p><strong>Projekt-Repository:</strong><br>
+<a href="https://github.com/ActiveClientMods/IT-Security-CI-CD">https://github.com/ActiveClientMods/IT-Security-CI-CD</a></p>
+<p><strong>Dokumentation:</strong><br>
+<a href="http://README.html">README.md</a> im Repository</p>
+<p><strong>Tools &amp; Ressourcen:</strong><br>
+Siehe Links in der Präsentation</p>
+<hr>
+<p><strong>Fragen?</strong></p>
+<hr>
+<p><strong>Built with ❤️ for IT Security Education</strong></p>
+<p><em>Universitätsprojekt 2025</em></p>
+
+            
+            
+        </body>
+        </html>

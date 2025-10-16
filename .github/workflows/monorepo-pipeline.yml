@@ -1,4 +1,4 @@
-name: 🚀 NestJS Monorepo CI/CD Pipeline
+name: NestJS Monorepo CI/CD Pipeline
 
 on:
   push:
@@ -28,7 +28,7 @@ jobs:
   # JOB 1: Initialize and Detect Changes
   # ==========================================
   initialize:
-    name: 🔧 Initialize Pipeline
+    name: Initialize Pipeline
     runs-on: ubuntu-latest
     outputs:
       should_deploy: ${{ steps.check.outputs.should_deploy }}
@@ -37,12 +37,12 @@ jobs:
       shared_changed: ${{ steps.changes.outputs.shared }}
       any_changed: ${{ steps.changes.outputs.any }}
     steps:
-      - name: 📥 Checkout Code
+      - name: Checkout Code
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
-      - name: 🔍 Detect Changes
+      - name: Detect Changes
         uses: dorny/paths-filter@v2
         id: changes
         with:
@@ -59,7 +59,7 @@ jobs:
             any:
               - '**'
 
-      - name: 🔍 Check Deployment Conditions
+      - name: Check Deployment Conditions
         id: check
         run: |
           if [[ "${{ github.ref }}" == "refs/heads/release" ]]; then
@@ -68,7 +68,7 @@ jobs:
             echo "should_deploy=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: 📌 Generate Version
+      - name: Generate Version
         id: version
         run: |
           if [[ "${{ github.ref }}" == "refs/heads/release" ]]; then
@@ -77,13 +77,13 @@ jobs:
             VERSION=dev-${GITHUB_SHA::7}
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "📦 Version: $VERSION"
+          echo "Version: $VERSION"
 
   # ==========================================
   # JOB 2: Secret Scanning with Gitleaks
   # ==========================================
   gitleaks-scan:
-    name: 🔐 Gitleaks - Secret Scanning
+    name: Gitleaks - Secret Scanning
     runs-on: ubuntu-latest
     needs: [initialize]
     if: needs.initialize.outputs.any_changed == 'true'
@@ -92,12 +92,12 @@ jobs:
       actions: read
       contents: read
     steps:
-      - name: 📥 Checkout Code
+      - name: Checkout Code
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
-      - name: 🔍 Run Gitleaks
+      - name: Run Gitleaks
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -114,7 +114,7 @@ jobs:
   # JOB 3: Backend Dependency Vulnerability Scanning
   # ==========================================
   backend-dependency-check:
-    name: 🛡️ Backend OWASP Dependency Check
+    name: Backend OWASP Dependency Check
     runs-on: ubuntu-latest
     needs: [initialize]
     if: needs.initialize.outputs.backend_changed == 'true'
@@ -126,13 +126,13 @@ jobs:
       run:
         working-directory: ./nestjs_backend
     steps:
-      - name: 📥 Checkout Code
+      - name: Checkout Code
         uses: actions/checkout@v5
 
-      - name: 📁 Create Reports Directory
+      - name: Create Reports Directory
         run: mkdir -p reports
 
-      - name: 🔍 Run OWASP Dependency Check (SARIF)
+      - name: Run OWASP Dependency Check (SARIF)
         uses: dependency-check/Dependency-Check_Action@main
         with:
           project: "nestjs-backend"
@@ -144,7 +144,7 @@ jobs:
             --enableExperimental
             --noupdate
 
-      - name: 🔍 Run OWASP Dependency Check (JSON for parsing)
+      - name: Run OWASP Dependency Check (JSON for parsing)
         uses: dependency-check/Dependency-Check_Action@main
         continue-on-error: true
         with:
@@ -157,7 +157,7 @@ jobs:
             --enableExperimental
             --noupdate
 
-      - name: 📊 Upload Backend Dependency Check Results
+      - name: Upload Backend Dependency Check Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -166,7 +166,7 @@ jobs:
             nestjs_backend/reports/
             nestjs_backend/reports-json/
 
-      - name: 📤 Upload SARIF to GitHub Security
+      - name: Upload SARIF to GitHub Security
         if: always() && hashFiles('nestjs_backend/reports/dependency-check-report.sarif') != ''
         uses: github/codeql-action/upload-sarif@v4
         with:
@@ -177,7 +177,7 @@ jobs:
   # JOB 4: CodeQL Analysis (Backend only)
   # ==========================================
   codeql-analysis:
-    name: 🔬 CodeQL Security Analysis
+    name: CodeQL Security Analysis
     runs-on: ubuntu-latest
     needs: [initialize]
     if: needs.initialize.outputs.backend_changed == 'true'
@@ -190,20 +190,20 @@ jobs:
       matrix:
         language: ["typescript"]
     steps:
-      - name: 📥 Checkout Code
+      - name: Checkout Code
         uses: actions/checkout@v5
 
-      - name: 🔧 Initialize CodeQL
+      - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
           queries: security-extended,security-and-quality
           source-root: nestjs_backend
 
-      - name: 🏗️ Autobuild
+      - name: Autobuild
         uses: github/codeql-action/autobuild@v4
 
-      - name: 🔍 Perform CodeQL Analysis
+      - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
         with:
           category: "/language:${{ matrix.language }}"
@@ -212,7 +212,7 @@ jobs:
   # JOB 5: Build Backend Application (NestJS)
   # ==========================================
   build-and-test-backend:
-    name: 🏗️ Build Backend Application
+    name: Build Backend Application
     runs-on: ubuntu-latest
     needs: [initialize]
     if: needs.initialize.outputs.backend_changed == 'true'
@@ -220,15 +220,15 @@ jobs:
       run:
         working-directory: ./nestjs_backend
     steps:
-      - name: 📥 Checkout Code
+      - name: Checkout Code
         uses: actions/checkout@v5
 
-      - name: 🔧 Setup pnpm and Node.js
+      - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm
 
-      - name: 🔍 Check for Deprecated Dependencies
+      - name: Check for Deprecated Dependencies
         run: |
-          echo "🔍 Checking for deprecated pnpm packages..."
+          echo "Checking for deprecated pnpm packages..."
           pnpm outdated || true
           pnpm dlx npm-check-updates --doctor || true
 
@@ -240,12 +240,12 @@ jobs:
             echo "No deprecated packages" > deprecated-packages.txt
           fi
 
-      - name: 🔨 Build Backend Application
+      - name: Build Backend Application
         run: pnpm run build
 
-      - name: 📜 License Compliance Check
+      - name: License Compliance Check
         run: |
-          echo "🔍 Running license compliance check..."
+          echo "Running license compliance check..."
 
           # Install license checker globally
           pnpm add -g license-checker
@@ -255,7 +255,7 @@ jobs:
           license-checker --csv --out license-report.csv || true
           license-checker --summary > license-summary.txt || true
 
-          echo "📊 License Summary:"
+          echo "License Summary:"
           cat license-summary.txt
 
           # Check for critical license issues (excluding our own private package)
@@ -294,23 +294,23 @@ jobs:
       - name: ✅ Build Verification
         run: |
           echo "✅ Backend application built successfully"
-          echo "ℹ️  Note: All tests (unit & E2E) run in 'Integration Tests' job with live services"
-          echo "� Build artifacts will be used by subsequent jobs"
+          echo "Note: All tests (unit & E2E) run in 'Integration Tests' job with live services"
+          echo "Build artifacts will be used by subsequent jobs"
 
-      - name: 📦 Upload Backend Build Artifacts
+      - name: Upload Backend Build Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: backend-build-artifacts
           path: nestjs_backend/dist/
 
-      - name: 📊 Upload Deprecated Packages Report
+      - name: Upload Deprecated Packages Report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: backend-deprecated-packages
           path: nestjs_backend/deprecated-packages.txt
 
-      - name: 📊 Upload License Compliance Reports
+      - name: Upload License Compliance Reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -324,23 +324,23 @@ jobs:
   # JOB 6: SonarCloud Quality Analysis (Post-Testing)
   # ==========================================
   sonarcloud:
-    name: ☁️ SonarCloud Quality Gate
+    name: SonarCloud Quality Gate
     runs-on: ubuntu-latest
     needs: [build-and-test-backend, integration-test]
     if: needs.build-and-test-backend.result == 'success' && needs.integration-test.result == 'success'
     steps:
-      - name: 📥 Checkout Code
+      - name: Checkout Code
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
-      - name: 📥 Download Test Coverage Reports
+      - name: Download Test Coverage Reports
         uses: actions/download-artifact@v4
         with:
           name: complete-test-suite-coverage
           path: nestjs_backend/coverage/
 
-      - name: 🔍 SonarCloud Scan
+      - name: SonarCloud Scan
         id: sonar-scan
         continue-on-error: true
         uses: SonarSource/sonarqube-scan-action@master
@@ -348,7 +348,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-      - name: 📊 Check Quality Gate
+      - name: Check Quality Gate
         if: always()
         run: |
           if [[ "${{ steps.sonar-scan.outcome }}" == "failure" ]]; then
@@ -362,7 +362,7 @@ jobs:
   # JOB 7: IaC Scanning with Checkov
   # ==========================================
   checkov-iac-scan:
-    name: 🏗️ Checkov IaC Security
+    name: Checkov IaC Security
     runs-on: ubuntu-latest
     needs: [initialize]
     if: needs.initialize.outputs.any_changed == 'true'
@@ -371,10 +371,10 @@ jobs:
       actions: read
       contents: read
     steps:
-      - name: 📥 Checkout Code
+      - name: Checkout Code
         uses: actions/checkout@v5
 
-      - name: 🔍 Run Checkov
+      - name: Run Checkov
         uses: bridgecrewio/checkov-action@master
         with:
           directory: .
@@ -385,14 +385,14 @@ jobs:
           quiet: true
           compact: true
 
-      - name: 📊 Upload Checkov Results
+      - name: Upload Checkov Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: checkov-report
           path: checkov-report.*
 
-      - name: 📤 Upload SARIF to GitHub Security
+      - name: Upload SARIF to GitHub Security
         if: always() && hashFiles('checkov-report.sarif') != ''
         uses: github/codeql-action/upload-sarif@v4
         with:
@@ -403,7 +403,7 @@ jobs:
   # JOB 8: Docker Build and Trivy Scan
   # ==========================================
   docker-build-scan:
-    name: 🐳 Docker Build & Trivy Scan
+    name: Docker Build & Trivy Scan
     runs-on: ubuntu-latest
     needs: [initialize, build-and-test-backend]
     if: needs.build-and-test-backend.result == 'success'
@@ -420,27 +420,27 @@ jobs:
             dockerfile: ./nestjs_backend/Dockerfile
             artifacts: backend-build-artifacts
     steps:
-      - name: 📥 Checkout Code
+      - name: Checkout Code
         uses: actions/checkout@v5
 
-      - name: 📥 Download Build Artifacts (${{ matrix.service }})
+      - name: Download Build Artifacts (${{ matrix.service }})
         if: matrix.artifacts != ''
         uses: actions/download-artifact@v4
         with:
           name: ${{ matrix.artifacts }}
           path: nestjs_backend/dist
 
-      - name: 🏷️ Generate Docker Image Name
+      - name: Generate Docker Image Name
         id: docker-meta
         run: |
           DOCKER_IMAGE_NAME=$(echo "${{ github.repository }}-${{ matrix.service }}" | tr '[:upper:]' '[:lower:]')
           echo "image-name=$DOCKER_IMAGE_NAME" >> $GITHUB_OUTPUT
-          echo "🐳 Docker image name: $DOCKER_IMAGE_NAME"
+          echo "Docker image name: $DOCKER_IMAGE_NAME"
 
-      - name: 🏗️ Set up Docker Buildx
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: 🔨 Build Docker Image (${{ matrix.service }})
+      - name: Build Docker Image (${{ matrix.service }})
         uses: docker/build-push-action@v5
         with:
           context: ${{ matrix.context }}
@@ -451,7 +451,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: 🔍 Run Trivy Filesystem Scan (${{ matrix.service }})
+      - name: Run Trivy Filesystem Scan (${{ matrix.service }})
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: "fs"
@@ -460,7 +460,7 @@ jobs:
           output: "trivy-fs-${{ matrix.service }}-results.sarif"
           severity: "CRITICAL,HIGH,MEDIUM"
 
-      - name: 🔍 Run Trivy Container Image Scan (${{ matrix.service }})
+      - name: Run Trivy Container Image Scan (${{ matrix.service }})
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: "image"
@@ -469,21 +469,21 @@ jobs:
           output: "trivy-image-${{ matrix.service }}-results.sarif"
           severity: "CRITICAL,HIGH,MEDIUM"
 
-      - name: 📊 Upload Trivy Results (${{ matrix.service }})
+      - name: Upload Trivy Results (${{ matrix.service }})
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: trivy-${{ matrix.service }}-reports
           path: trivy-*-${{ matrix.service }}-results.sarif
 
-      - name: 📤 Upload Trivy SARIF to GitHub Security (${{ matrix.service }} - FS)
+      - name: Upload Trivy SARIF to GitHub Security (${{ matrix.service }} - FS)
         if: always() && hashFiles('trivy-fs-${{ matrix.service }}-results.sarif') != ''
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-fs-${{ matrix.service }}-results.sarif
           category: trivy-${{ matrix.service }}-filesystem
 
-      - name: 📤 Upload Trivy SARIF to GitHub Security (${{ matrix.service }} - Image)
+      - name: Upload Trivy SARIF to GitHub Security (${{ matrix.service }} - Image)
         if: always() && hashFiles('trivy-image-${{ matrix.service }}-results.sarif') != ''
         uses: github/codeql-action/upload-sarif@v4
         with:
@@ -499,7 +499,7 @@ jobs:
     needs: [docker-build-scan]
     if: needs.docker-build-scan.result == 'success'
     steps:
-      - name: 📥 Checkout Code
+      - name: Checkout Code
         uses: actions/checkout@v5
 
       - name: Download Backend Artifacts
@@ -508,9 +508,9 @@ jobs:
           name: backend-build-artifacts
           path: nestjs_backend/dist/
 
-      - name: 🛠️ Create Integration Test Environment
+      - name: Create Integration Test Environment
         run: |
-          echo "🔧 Setting up integration test environment..."
+          echo "Setting up integration test environment..."
 
           # Create basic .env file for integration testing
           cat > .env << EOF
@@ -526,7 +526,7 @@ jobs:
 
       - name: Run Docker Compose
         run: |
-          echo "🔍 Starting services with docker compose..."
+          echo "Starting services with docker compose..."
           docker compose up -d --build
 
           if [ $? -ne 0 ]; then
@@ -535,10 +535,10 @@ jobs:
             exit 1
           fi
 
-          echo "⏳ Waiting for services to be ready..."
+          echo " Waiting for services to be ready..."
           sleep 45
 
-          echo "🔍 Checking service health..."
+          echo "Checking service health..."
           docker compose ps
 
           echo "🧪 Running basic integration tests..."
@@ -548,7 +548,7 @@ jobs:
               echo "✅ Backend health check passed"
               break
             else
-              echo "⏳ Attempt $i: Backend not ready yet, waiting..."
+              echo " Attempt $i: Backend not ready yet, waiting..."
               sleep 10
             fi
           done
@@ -556,21 +556,21 @@ jobs:
           # Final health check
           curl -f http://localhost:3000/health || echo "❌ Backend health check failed after multiple attempts"
 
-      - name: 🔧 Setup pnpm and Node.js for Testing
+      - name: Setup pnpm and Node.js for Testing
         uses: ./.github/actions/setup-pnpm
 
       - name: 🧪 Run Complete NestJS Test Suite
         working-directory: ./nestjs_backend
         run: |
           echo "🧪 Running complete NestJS test suite against live services..."
-          echo "ℹ️  This includes both unit tests and E2E integration tests"
+          echo "This includes both unit tests and E2E integration tests"
 
           # Set up Node.js environment for testing
           export NODE_ENV=test
           export DATABASE_URL="postgresql://appuser:apppass@localhost:5432/appdb"
           export REDIS_URL="redis://:redispass@localhost:6379"
 
-          echo "🔍 Running unit tests with coverage..."
+          echo "Running unit tests with coverage..."
           UNIT_TEST_OUTPUT=$(pnpm exec jest --coverage --coverageReporters=json --coverageReporters=lcov --passWithNoTests --verbose 2>&1)
           UNIT_TEST_EXIT_CODE=$?
 
@@ -582,7 +582,7 @@ jobs:
 
           if [ $UNIT_TEST_EXIT_CODE -eq 0 ]; then
             echo "✅ Unit tests passed with coverage"
-            echo "📊 Test results saved to unit-test-results.txt"
+            echo "Test results saved to unit-test-results.txt"
           elif echo "$UNIT_TEST_OUTPUT" | grep -q "No tests found"; then
             echo "⚠️ No unit tests found - skipping"
           else
@@ -591,7 +591,7 @@ jobs:
             echo "Continuing with E2E tests..."
           fi
 
-          echo "🔍 Running end-to-end integration tests..."
+          echo "Running end-to-end integration tests..."
           E2E_TEST_OUTPUT=$(pnpm exec jest --config ./test/jest-e2e.json --passWithNoTests --verbose 2>&1)
           E2E_TEST_EXIT_CODE=$?
 
@@ -603,7 +603,7 @@ jobs:
 
           if [ $E2E_TEST_EXIT_CODE -eq 0 ]; then
             echo "✅ E2E integration tests passed"
-            echo "📊 E2E test results saved to e2e-test-results.txt"
+            echo "E2E test results saved to e2e-test-results.txt"
           elif echo "$E2E_TEST_OUTPUT" | grep -q "No tests found"; then
             echo "⚠️ No e2e tests found - skipping (this is normal for new projects)"
           else
@@ -614,14 +614,14 @@ jobs:
 
           echo "✅ Complete test suite finished"
 
-      - name: 📊 Upload Test Coverage Reports
+      - name: Upload Test Coverage Reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: complete-test-suite-coverage
           path: nestjs_backend/coverage/
 
-      - name: 📋 Upload Test Results
+      - name: Upload Test Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -631,10 +631,10 @@ jobs:
             nestjs_backend/e2e-test-results.txt
             nestjs_backend/test-results-summary.txt
 
-      - name: �📋 Collect Docker Compose Logs
+      - name: �Collect Docker Compose Logs
         if: always()
         run: |
-          echo "📋 Collecting docker compose logs..."
+          echo "Collecting docker compose logs..."
 
           # Show current container status
           echo "=== Container Status ===" > docker-compose-logs.txt
@@ -648,7 +648,7 @@ jobs:
           echo "🧹 Cleaning up services..."
           docker compose down --volumes --remove-orphans || echo "Failed to clean up services"
 
-      - name: 📊 Upload Docker Environment Logs
+      - name: Upload Docker Environment Logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -659,7 +659,7 @@ jobs:
   # JOB 10: Security Summary and Reporting
   # ==========================================
   security-summary:
-    name: 📋 Security Summary & Report
+    name: Security Summary & Report
     runs-on: ubuntu-latest
     needs:
       [
@@ -676,18 +676,18 @@ jobs:
       issues: write
       pull-requests: write
     steps:
-      - name: 📥 Checkout Code
+      - name: Checkout Code
         uses: actions/checkout@v5
 
-      - name: 📥 Download All Artifacts
+      - name: Download All Artifacts
         uses: actions/download-artifact@v4
         with:
           path: security-reports/
 
-      - name: 🔍 Parse Security Results
+      - name: Parse Security Results
         id: parse-results
         run: |
-          echo "🔍 Parsing security scan results for monorepo..."
+          echo "Parsing security scan results for monorepo..."
 
           CRITICAL_COUNT=0
           HIGH_COUNT=0
@@ -700,7 +700,7 @@ jobs:
             GITLEAKS_COUNT=$(jq '.runs[0].results | length' security-reports/gitleaks-results/results.sarif 2>/dev/null || echo "0")
             if [ "$GITLEAKS_COUNT" -gt 0 ]; then
               CRITICAL_COUNT=$((CRITICAL_COUNT + GITLEAKS_COUNT))
-              FINDINGS="${FINDINGS}### 🔐 Gitleaks: $GITLEAKS_COUNT secret(s) detected\n"
+              FINDINGS="${FINDINGS}### Gitleaks: $GITLEAKS_COUNT secret(s) detected\n"
             else
               FINDINGS="${FINDINGS}### ✅ Gitleaks: No secrets detected\n"
             fi
@@ -714,26 +714,26 @@ jobs:
             DEP_HIGH=$(jq '[.dependencies[]?.vulnerabilities[]? | select(.severity=="HIGH")] | length' security-reports/backend-dependency-check-report/reports-json/dependency-check-report.json 2>/dev/null || echo "0")
             CRITICAL_COUNT=$((CRITICAL_COUNT + DEP_CRITICAL))
             HIGH_COUNT=$((HIGH_COUNT + DEP_HIGH))
-            FINDINGS="${FINDINGS}### 🛡️ Backend OWASP Dependency Check: $DEP_CRITICAL critical, $DEP_HIGH high\n"
+            FINDINGS="${FINDINGS}### Backend OWASP Dependency Check: $DEP_CRITICAL critical, $DEP_HIGH high\n"
           else
-            FINDINGS="${FINDINGS}### 🛡️ Backend OWASP Dependency Check: Scan completed\n"
+            FINDINGS="${FINDINGS}### Backend OWASP Dependency Check: Scan completed\n"
           fi
 
           # License check
           if [ -d "security-reports/backend-license-compliance" ]; then
-            FINDINGS="${FINDINGS}### 📜 License Compliance: Backend license compliance checked\n"
+            FINDINGS="${FINDINGS}### License Compliance: Backend license compliance checked\n"
           fi
 
           # Checkov
           if [ -f "security-reports/checkov-report/checkov-report.json" ]; then
             CHECKOV_FAILED=$(jq '.summary.failed // 0' security-reports/checkov-report/checkov-report.json || echo "0")
             CHECKOV_PASSED=$(jq '.summary.passed // 0' security-reports/checkov-report/checkov-report.json || echo "0")
-            FINDINGS="${FINDINGS}### 🏗️ Checkov IaC: $CHECKOV_FAILED failed, $CHECKOV_PASSED passed\n"
+            FINDINGS="${FINDINGS}### Checkov IaC: $CHECKOV_FAILED failed, $CHECKOV_PASSED passed\n"
           fi
 
           # Docker scans
           if [ -d "security-reports/trivy-backend-reports" ]; then
-            FINDINGS="${FINDINGS}### 🐳 Trivy Container Scans: Backend Docker image scanned\n"
+            FINDINGS="${FINDINGS}### Trivy Container Scans: Backend Docker image scanned\n"
           fi
 
           # Save for next steps
@@ -743,14 +743,14 @@ jobs:
 
           # Create summary
           cat > security-summary.md <<EOF
-          # 🔒 Monorepo Security Scan Summary
+          # Monorepo Security Scan Summary
 
           **Pipeline Run:** ${{ github.run_number }}
           **Branch:** ${{ github.ref_name }}
           **Commit:** ${{ github.sha }}
           **Backend Changed:** ${{ needs.initialize.outputs.backend_changed }}
 
-          ## 📊 Vulnerability Overview
+          ## Vulnerability Overview
 
           | Severity | Count |
           |----------|-------|
@@ -759,17 +759,17 @@ jobs:
           | 🟡 Medium | $MEDIUM_COUNT |
           | 🔵 Low | $LOW_COUNT |
 
-          ## 🔍 Scan Results
+          ## Scan Results
 
           $FINDINGS
 
-          ## 📦 Components Analyzed
+          ## Components Analyzed
 
           - **NestJS Backend** (nestjs_backend/): API server security analysis
           - **Infrastructure**: Docker, docker-compose.yml, .env file security
           - **Shared Resources**: Root-level configuration and secrets
 
-          ## 📎 Detailed Reports
+          ## Detailed Reports
 
           All detailed reports are available as artifacts in this workflow run.
 
@@ -779,7 +779,7 @@ jobs:
 
           cat security-summary.md
 
-      - name: 📝 Comment PR with Summary
+      - name: Comment PR with Summary
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
@@ -796,7 +796,7 @@ jobs:
 
             const botComment = comments.find(comment => 
               comment.user.type === 'Bot' && 
-              comment.body.includes('🔒 Monorepo Security Scan Summary')
+              comment.body.includes('Monorepo Security Scan Summary')
             );
 
             if (botComment) {
@@ -815,7 +815,7 @@ jobs:
               });
             }
 
-      - name: 🚨 Create Issue for Critical Findings
+      - name: Create Issue for Critical Findings
         if: steps.parse-results.outputs.has_critical == 'true'
         uses: actions/github-script@v7
         with:
@@ -824,11 +824,11 @@ jobs:
             const fs = require('fs');
             const summary = fs.readFileSync('security-summary.md', 'utf8');
 
-            const title = `🚨 Critical Security Vulnerabilities Detected - ${context.sha.substring(0, 7)}`;
+            const title = `Critical Security Vulnerabilities Detected - ${context.sha.substring(0, 7)}`;
 
             const body = `${summary}
 
-            ## ⚠️ Action Required
+            ## Action Required
 
             Critical security vulnerabilities have been detected in the backend. 
             Please review the security reports and address these issues immediately.
@@ -846,7 +846,7 @@ jobs:
               labels: ['security', 'critical', 'automated', 'backend']
             });
 
-      - name: 📊 Upload Security Summary
+      - name: Upload Security Summary
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -866,9 +866,9 @@ jobs:
       [security-summary, build-and-test-backend, sonarcloud, integration-test]
     if: always()
     steps:
-      - name: 🎯 Check All Jobs Status
+      - name: Check All Jobs Status
         run: |
-          echo "🔍 Checking monorepo pipeline status..."
+          echo "Checking monorepo pipeline status..."
 
           # Critical failures that should block the pipeline
           if [[ "${{ needs.security-summary.result }}" == "failure" ]] || \
@@ -883,11 +883,11 @@ jobs:
             echo "✅ All quality checks passed!"
           fi
 
-      - name: 🎉 Pipeline Success
+      - name: Pipeline Success
         if: success()
         run: |
-          echo "🎉 NestJS pipeline completed successfully!"
+          echo "NestJS pipeline completed successfully!"
           echo "✅ All security checks passed"
           echo "✅ Build and tests passed"
           echo "✅ Quality gate passed"
-          echo "🚀 Backend: ${{ needs.initialize.outputs.backend_changed == 'true' && 'Built & Tested' || 'No changes' }}"
+          echo "Backend: ${{ needs.initialize.outputs.backend_changed == 'true' && 'Built & Tested' || 'No changes' }}"

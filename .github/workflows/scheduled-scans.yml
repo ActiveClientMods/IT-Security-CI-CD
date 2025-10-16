@@ -1,4 +1,4 @@
-name: 📅 Scheduled Security Scans
+name: Scheduled Security Scans
 
 on:
   schedule:
@@ -12,30 +12,30 @@ permissions:
 
 jobs:
   scheduled-security-scan:
-    name: 🔍 Weekly Security Audit
+    name: Weekly Security Audit
     runs-on: ubuntu-latest
     permissions:
       security-events: write
       issues: write
     steps:
-      - name: 📥 Checkout Code
+      - name: Checkout Code
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
-      - name: 🟢 Setup Node.js (for backend scanning)
+      - name: Setup Node.js (for backend scanning)
         uses: actions/setup-node@v5
         with:
           node-version: "20"
           cache: "npm"
           cache-dependency-path: nestjs_backend/package-lock.json
 
-      - name: 📦 Install Backend Dependencies
+      - name: Install Backend Dependencies
         run: |
           cd nestjs_backend
           npm ci
 
-      - name: 🔍 Run Trivy Filesystem Scan
+      - name: Run Trivy Filesystem Scan
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: "fs"
@@ -44,40 +44,40 @@ jobs:
           output: "trivy-scheduled-fs.sarif"
           severity: "CRITICAL,HIGH"
 
-      - name: 📤 Upload Trivy Results
+      - name: Upload Trivy Results
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-scheduled-fs.sarif
           category: trivy-scheduled
 
-      - name: 🔍 Run OWASP Dependency Check
+      - name: Run OWASP Dependency Check
         uses: dependency-check/Dependency-Check_Action@main
         with:
           project: ${{ github.repository }}
           path: "."
           format: "SARIF"
 
-      - name: 📤 Upload Dependency Check Results
+      - name: Upload Dependency Check Results
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: reports/dependency-check-report.sarif
           category: dependency-check-scheduled
 
-      - name: 🚨 Create Weekly Security Report Issue
+      - name: Create Weekly Security Report Issue
         if: always()
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const date = new Date().toISOString().split('T')[0];
-            const title = `📅 Weekly Security Scan Report - ${date}`;
+            const title = `Weekly Security Scan Report - ${date}`;
 
             const body = `# Weekly Security Audit Report
 
             **Date:** ${date}
             **Workflow Run:** ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}
 
-            ## 🔍 Scans Performed
+            ## Scans Performed
             - ✅ Trivy Filesystem Scan
             - ✅ OWASP Dependency Check
 
