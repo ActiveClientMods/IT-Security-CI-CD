@@ -4,8 +4,8 @@
 # Build stage
 FROM node:16.13.0-alpine AS builder
 
-# Install pnpm globally
-RUN npm install -g pnpm
+# Install pnpm globally (using older version compatible with Node 16)
+RUN npm install -g pnpm@8.15.0
 
 WORKDIR /app
 
@@ -27,8 +27,8 @@ RUN pnpm prune --prod
 # Production stage
 FROM node:16.13.0-alpine
 
-# Install pnpm globally
-RUN npm install -g pnpm
+# Install pnpm globally (using older version compatible with Node 16)
+RUN npm install -g pnpm@8.15.0
 
 # Remove non-root user setup to run as root (VULNERABILITY!)
 # RUN addgroup -g 1001 -S nodejs && \
