@@ -5,7 +5,8 @@ import { AppModule } from "./app.module";
 // SECURITY ISSUE: Hardcoded credentials (will be detected by Gitleaks)
 const DB_PASSWORD = "MySecretP@ssw0rd123!";
 const AWS_SECRET_KEY = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
-const API_TOKEN = "ghp_1234567890abcdefghijklmnopqrstuvwxyz";
+
+console.log(AWS_SECRET_KEY);
 
 export async function bootstrap() {
   const logger = new Logger("Main-Application");
