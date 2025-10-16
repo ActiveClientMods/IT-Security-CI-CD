@@ -102,6 +102,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+          GITLEAKS_ENABLE_COMMENTS: false
+        with:
+          # Scan entire repository, not just the diff
+          args: --verbose --redact --no-git
 
       - name: Upload Gitleaks SARIF to GitHub Security
         if: always() && hashFiles('results.sarif') != ''
@@ -559,10 +563,10 @@ jobs:
       - name: Setup pnpm and Node.js for Testing
         uses: ./.github/actions/setup-pnpm
 
-      - name: 🧪 Run Complete NestJS Test Suite
+      - name: Run Complete NestJS Test Suite
         working-directory: ./nestjs_backend
         run: |
-          echo "🧪 Running complete NestJS test suite against live services..."
+          echo "Running complete NestJS test suite against live services..."
           echo "This includes both unit tests and E2E integration tests"
 
           # Set up Node.js environment for testing
@@ -860,7 +864,7 @@ jobs:
   # JOB 11: Final Quality Gate
   # ==========================================
   quality-gate:
-    name: ✅ Final Quality Gate
+    name: Final Quality Gate
     runs-on: ubuntu-latest
     needs:
       [security-summary, build-and-test-backend, sonarcloud, integration-test]
