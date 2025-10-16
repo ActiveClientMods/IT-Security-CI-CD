@@ -134,6 +134,8 @@ jobs:
 
       - name: Run OWASP Dependency Check (SARIF)
         uses: dependency-check/Dependency-Check_Action@main
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         with:
           project: "nestjs-backend"
           path: "./nestjs_backend"
@@ -142,11 +144,12 @@ jobs:
           args: >
             --enableRetired
             --enableExperimental
-            --noupdate
 
       - name: Run OWASP Dependency Check (JSON for parsing)
         uses: dependency-check/Dependency-Check_Action@main
         continue-on-error: true
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         with:
           project: "nestjs-backend"
           path: "./nestjs_backend"
@@ -155,7 +158,6 @@ jobs:
           args: >
             --enableRetired
             --enableExperimental
-            --noupdate
 
       - name: Upload Backend Dependency Check Results
         if: always()
