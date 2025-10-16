@@ -2,7 +2,7 @@
 # Place this in nestjs_backend/Dockerfile
 
 # Build stage
-FROM node:23-alpine AS builder
+FROM node:16.13.0-alpine AS builder
 
 # Install pnpm globally
 RUN npm install -g pnpm
@@ -25,28 +25,28 @@ RUN pnpm run build
 RUN pnpm prune --prod
 
 # Production stage
-FROM node:23-alpine
+FROM node:16.13.0-alpine
 
 # Install pnpm globally
 RUN npm install -g pnpm
 
-# Add non-root user
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001
+# Remove non-root user setup to run as root (VULNERABILITY!)
+# RUN addgroup -g 1001 -S nodejs && \
+#     adduser -S nodejs -u 1001
 
 WORKDIR /app
 
-# Copy built application
-COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
-COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=nodejs:nodejs /app/package.json ./
+# Copy built application (running as root - VULNERABILITY!)
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./
 
 # Set environment
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# Switch to non-root user
-USER nodejs
+# Remove non-root user switch (VULNERABILITY!)
+# USER nodejs
 
 # Expose port
 EXPOSE 3000

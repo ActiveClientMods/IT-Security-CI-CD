@@ -1,0 +1,89 @@
+# Gitleaks Configuration
+# This file customizes secret detection rules
+# Documentation: https://github.com/gitleaks/gitleaks
+
+title = "Gitleaks Configuration for IT Security CI/CD Pipeline"
+
+# Global settings
+[extend]
+# Use default gitleaks rules as base
+useDefault = true
+
+# Additional custom rules for demo purposes
+[[rules]]
+id = "demo-api-key"
+description = "Demo API Key Pattern"
+regex = '''(?i)(api[_-]?key|apikey)['\s]*[:=]['\s]*['"]?[a-z0-9_\-]{20,}['"]?'''
+tags = ["api", "key", "demo"]
+
+[[rules]]
+id = "demo-password"
+description = "Hardcoded Password"
+regex = '''(?i)(password|passwd|pwd)['\s]*[:=]['\s]*['"]?[^\s'"]{8,}['"]?'''
+tags = ["password", "credentials"]
+
+[[rules]]
+id = "demo-secret"
+description = "Generic Secret"
+regex = '''(?i)(secret|token)['\s]*[:=]['\s]*['"]?[a-z0-9_\-]{16,}['"]?'''
+tags = ["secret", "token"]
+
+# AWS patterns (will detect the hardcoded AWS key)
+[[rules]]
+id = "aws-access-key"
+description = "AWS Access Key"
+regex = '''(A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}'''
+tags = ["aws", "access-key"]
+
+[[rules]]
+id = "aws-secret-key"
+description = "AWS Secret Key"
+regex = '''(?i)aws(.{0,20})?['\"][0-9a-zA-Z\/+]{40}['\"]'''
+tags = ["aws", "secret-key"]
+
+# GitHub token pattern (will detect the hardcoded GitHub token)
+[[rules]]
+id = "github-pat"
+description = "GitHub Personal Access Token"
+regex = '''ghp_[0-9a-zA-Z]{36}'''
+tags = ["github", "token", "pat"]
+
+[[rules]]
+id = "github-oauth"
+description = "GitHub OAuth Token"
+regex = '''gho_[0-9a-zA-Z]{36}'''
+tags = ["github", "token", "oauth"]
+
+# Database connection strings
+[[rules]]
+id = "postgres-connection"
+description = "PostgreSQL Connection String"
+regex = '''(?i)postgres(ql)?://[^:]+:[^@]+@[^/]+/\w+'''
+tags = ["database", "postgresql", "connection-string"]
+
+# Allowlist - paths to ignore (optional)
+[allowlist]
+description = "Global Allowlist"
+# Ignore test files and documentation
+paths = [
+    '''test/fixtures/.*''',
+    '''.*_test\.go''',
+    '''.*\.md''',
+    '''^\.git/''',
+]
+
+# Stop words - reduce false positives
+stopwords = [
+    '''example''',
+    '''sample''',
+    '''dummy''',
+    '''placeholder''',
+]
+
+# Entropy detection for high-randomness strings
+[[rules]]
+id = "high-entropy-string"
+description = "High Entropy String (possible secret)"
+regex = '''['"][a-zA-Z0-9+/=]{32,}['"]'''
+entropy = 4.5
+tags = ["entropy", "secret"]

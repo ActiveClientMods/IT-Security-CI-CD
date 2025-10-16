@@ -9,10 +9,16 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
+      # SECURITY ISSUE: Hardcoded credentials in docker-compose (Checkov will detect)
+      - DB_PASSWORD=MyHardcodedPassword123!
+      - API_KEY=sk-1234567890abcdefghijklmnopqrstuvwxyz
     env_file:
       - .env
     volumes:
       - ./nestjs_backend/dist:/app/dist:ro
+    # SECURITY ISSUE: No resource limits (Checkov will detect)
+    # SECURITY ISSUE: Running with privileged mode
+    privileged: true
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 30s
@@ -25,11 +31,10 @@ services:
       - database
       - redis
 
-
-
   # Database Service (PostgreSQL)
   database:
-    image: postgres:18-alpine
+    # SECURITY ISSUE: Using old PostgreSQL version with known vulnerabilities
+    image: postgres:12.0-alpine
     environment:
       POSTGRES_DB: ${DB_NAME:-appdb}
       POSTGRES_USER: ${DB_USER:-appuser}
@@ -38,6 +43,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
     ports:
+      # SECURITY ISSUE: Exposing database to host (Checkov will warn)
       - "5432:5432"
     healthcheck:
       test:
@@ -51,8 +57,10 @@ services:
 
   # Cache Service (Redis)
   redis:
-    image: redis:7-alpine
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redispass}
+    # SECURITY ISSUE: Using old Redis version
+    image: redis:5.0.0-alpine
+    # SECURITY ISSUE: Redis without password
+    command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
     ports:
@@ -71,7 +79,6 @@ volumes:
     driver: local
   redis_data:
     driver: local
-
 
 networks:
   app-network:

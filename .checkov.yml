@@ -1,0 +1,68 @@
+# Checkov Configuration File
+# Documentation: https://www.checkov.io/2.Basics/Suppressing%20and%20Skipping%20Policies.html
+
+# Directories to scan
+directory:
+  - .
+
+# Frameworks to check
+framework:
+  - dockerfile
+  - docker_compose
+  - github_actions
+  - secrets
+
+# Output formats
+output:
+  - sarif
+  - cli
+
+# Severity threshold (fail on these severities)
+# Options: critical, high, medium, low
+check:
+  - CKV_DOCKER_*
+  - CKV_SECRET_*
+  - CKV2_GHA_*
+
+# Enable specific checks
+enable-check:
+  # Docker security
+  - CKV_DOCKER_2 # Ensure USER is not root
+  - CKV_DOCKER_3 # Ensure COPY is used instead of ADD
+  - CKV_DOCKER_4 # Ensure HEALTHCHECK instruction is used
+  - CKV_DOCKER_5 # Ensure apt-get update and install are in same RUN command
+  - CKV_DOCKER_7 # Ensure secrets are not stored in ENV variables
+
+  # Docker Compose security
+  - CKV_DOCKER_8 # Ensure privileged mode is not used
+  - CKV_DOCKER_9 # Ensure container resources are limited
+
+  # Secret detection
+  - CKV_SECRET_6 # Base64 High Entropy String
+  - CKV_SECRET_2 # AWS Access Key
+  - CKV_SECRET_4 # Password in URL
+
+  # GitHub Actions
+  - CKV2_GHA_1 # Ensure run commands are not vulnerable to shell injection
+
+# Specific policies to skip (optional - for demo you want all enabled)
+# skip-check:
+#   - CKV_DOCKER_2  # Example: skip root user check
+
+# Files to skip (optional)
+skip-path:
+  - .git
+  - node_modules
+  - .venv
+  - venv
+
+# Compact output for cleaner logs
+compact: false
+
+# Quiet mode (only show failed checks)
+quiet: false
+
+# Download external modules
+download-external-modules: true
+# Enable verbose output for debugging
+# verbose: true

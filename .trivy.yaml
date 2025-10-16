@@ -1,0 +1,65 @@
+# Trivy Configuration
+# Documentation: https://aquasecurity.github.io/trivy/latest/docs/configuration/
+
+# Scan settings
+scan:
+  # Security checks to enable
+  security-checks: "vuln,secret,config"
+
+  # Severity levels to report
+  severity: "CRITICAL,HIGH,MEDIUM,LOW"
+
+  # Scan all layers
+  scanners: "vuln,secret,misconfig"
+
+# Vulnerability settings
+vulnerability:
+  # Type of vulnerabilities to detect
+  type: "os,library"
+
+# Secret scanning
+secret:
+  config: .trivy-secret.yaml
+
+# Ignore unfixed vulnerabilities (set to false for demo to show all)
+ignore-unfixed: false
+
+# Timeout settings
+timeout: "5m"
+
+# Exit code
+# exit-code: 1  # Uncomment to fail build on findings
+
+# Cache settings
+cache:
+  # Cache backend
+  backend: "fs"
+
+# Report format
+format: "sarif"
+
+# Paths to skip
+skip-dirs:
+  - node_modules
+  - .git
+  - .github
+  - test
+  - tests
+  - coverage
+
+# Skip files
+skip-files:
+  - "**/*.md"
+  - "**/*.txt"
+  - "**/LICENSE"
+
+# Database
+db:
+  # Skip database update (use cached)
+  skip-update: false
+
+# Output
+output: "trivy-results.sarif"
+
+# Offline mode (set to false to get latest vulnerability data)
+offline-scan: false
