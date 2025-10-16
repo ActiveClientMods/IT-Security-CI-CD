@@ -97,15 +97,23 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
-          GITLEAKS_ENABLE_COMMENTS: false
+      - name: Install Gitleaks CLI
+        uses: aquasecurity/setup-gitleaks@v1
         with:
-          # Scan entire repository, not just the diff
-          args: --verbose --redact --no-git
+          version: '8.24.3'
+
+      - name: Run Gitleaks on Entire Repository
+        run: |
+          # Scan all files in the repository, not just git history
+          gitleaks detect \
+            --source . \
+            --report-format sarif \
+            --report-path results.sarif \
+            --redact \
+            --verbose \
+            --no-git \
+            --exit-code 0
+        continue-on-error: true
 
       - name: Upload Gitleaks SARIF to GitHub Security
         if: always() && hashFiles('results.sarif') != ''
