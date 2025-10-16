@@ -144,6 +144,7 @@ jobs:
           args: >
             --enableRetired
             --enableExperimental
+            --failOnCVSS 7
 
       - name: Run OWASP Dependency Check (JSON for parsing)
         uses: dependency-check/Dependency-Check_Action@main
@@ -158,6 +159,7 @@ jobs:
           args: >
             --enableRetired
             --enableExperimental
+            --failOnCVSS 7
 
       - name: Upload Backend Dependency Check Results
         if: always()
