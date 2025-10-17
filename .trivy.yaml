@@ -1,25 +1,26 @@
 # Trivy Configuration
 # Documentation: https://aquasecurity.github.io/trivy/latest/docs/configuration/
+# Note: Secret scanning is handled by Gitleaks - Trivy focuses on vulnerabilities and misconfigurations
 
 # Scan settings
 scan:
-  # Security checks to enable
-  security-checks: "vuln,secret,config"
+  # Security checks to enable (removed 'secret' - handled by Gitleaks)
+  security-checks: "vuln,config"
 
   # Severity levels to report
   severity: "CRITICAL,HIGH,MEDIUM,LOW"
 
-  # Scan all layers
-  scanners: "vuln,secret,misconfig"
+  # Scan all layers (removed 'secret' scanner)
+  scanners: "vuln,misconfig"
 
 # Vulnerability settings
 vulnerability:
   # Type of vulnerabilities to detect
   type: "os,library"
 
-# Secret scanning
-secret:
-  config: .trivy-secret.yaml
+# Note: Secret scanning removed - handled comprehensively by Gitleaks
+# secret:
+#   config: .trivy-secret.yaml
 
 # Ignore unfixed vulnerabilities (set to false for demo to show all)
 ignore-unfixed: false
