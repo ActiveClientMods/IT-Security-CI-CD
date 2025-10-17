@@ -98,11 +98,57 @@ jobs:
         with:
           fetch-depth: 0 # Full git history for comprehensive scan
 
+      - name: Install Gitleaks
+        run: |
+          wget https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz
+          tar -xzf gitleaks_8.24.3_linux_x64.tar.gz
+          chmod +x gitleaks
+          sudo mv gitleaks /usr/local/bin/
+          gitleaks version
+
       - name: Run Gitleaks (Full Repository Scan)
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+        run: |
+          echo "🔍 Running Gitleaks on ENTIRE repository (all commits, all files)..."
+
+          # Scan entire git history (not just last commit)
+          gitleaks detect \
+            --source . \
+            --verbose \
+            --redact \
+            --report-format sarif \
+            --report-path results.sarif \
+            --exit-code 2 \
+            --no-banner
+
+          echo "✅ Gitleaks scan completed - no secrets found"
+        continue-on-error: true
+        id: gitleaks
+
+      - name: Check Gitleaks Results
+        if: always()
+        run: |
+          if [ -f results.sarif ]; then
+            echo "📊 Gitleaks SARIF report generated"
+            
+            # Count findings
+            LEAK_COUNT=$(jq '.runs[0].results | length' results.sarif 2>/dev/null || echo "0")
+            echo "Found $LEAK_COUNT potential secret(s)"
+            
+            if [ "$LEAK_COUNT" -gt 0 ]; then
+              echo "⚠️ SECRETS DETECTED IN REPOSITORY!"
+              jq '.runs[0].results' results.sarif
+              exit 1
+            fi
+          else
+            echo "⚠️ No SARIF report generated"
+          fi
+
+      - name: Upload Gitleaks Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-results
+          path: results.sarif
 
       - name: Upload Gitleaks SARIF to GitHub Security
         if: always() && hashFiles('results.sarif') != ''
@@ -136,7 +182,7 @@ jobs:
       - name: Run OWASP Dependency Check (SARIF)
         id: owasp-sarif
         uses: dependency-check/Dependency-Check_Action@main
-        continue-on-error: true # Don't fail step, capture status for Quality Gate
+        continue-on-error: true # Continue to generate both reports
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         with:
@@ -152,7 +198,7 @@ jobs:
       - name: Run OWASP Dependency Check (JSON for parsing)
         id: owasp-json
         uses: dependency-check/Dependency-Check_Action@main
-        continue-on-error: true # Don't fail step, capture status for Quality Gate
+        continue-on-error: true # Continue to upload reports
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         with:
@@ -180,6 +226,23 @@ jobs:
         with:
           sarif_file: nestjs_backend/reports/dependency-check-report.sarif
           category: backend-dependency-check
+
+      - name: Fail Job if Vulnerabilities Found
+        if: always()
+        run: |
+          echo "Checking OWASP Dependency Check results..."
+
+          if [[ "${{ steps.owasp-sarif.outcome }}" == "failure" ]]; then
+            echo "❌ CRITICAL: OWASP Dependency Check found vulnerabilities with CVSS >= 7.0"
+            echo "SARIF scan outcome: ${{ steps.owasp-sarif.outcome }}"
+            exit 1
+          elif [[ "${{ steps.owasp-json.outcome }}" == "failure" ]]; then
+            echo "❌ CRITICAL: OWASP Dependency Check found vulnerabilities with CVSS >= 7.0"
+            echo "JSON scan outcome: ${{ steps.owasp-json.outcome }}"
+            exit 1
+          else
+            echo "✅ No critical vulnerabilities found"
+          fi
 
   # ==========================================
   # JOB 4: CodeQL Analysis (Backend only)
@@ -899,24 +962,38 @@ jobs:
           if [[ "${{ needs.gitleaks-scan.result }}" == "failure" ]]; then
             echo "❌ CRITICAL: Gitleaks secret scanning failed - secrets detected!"
             CRITICAL_FAILED=1
+          else
+            echo "✅ Gitleaks passed - no secrets detected"
           fi
 
           # 2. OWASP Dependency Check - CRITICAL (if backend changed)
           if [[ "${{ needs.backend-dependency-check.result }}" == "failure" ]]; then
             echo "❌ CRITICAL: OWASP Dependency Check failed - critical vulnerabilities detected!"
             CRITICAL_FAILED=1
+          elif [[ "${{ needs.backend-dependency-check.result }}" == "skipped" ]]; then
+            echo "⏭️  OWASP Dependency Check skipped (no backend changes)"
+          else
+            echo "✅ OWASP Dependency Check passed"
           fi
 
           # 3. Build & Test - CRITICAL (if backend changed)
           if [[ "${{ needs.build-and-test-backend.result }}" == "failure" ]]; then
             echo "❌ CRITICAL: Build and test failed!"
             CRITICAL_FAILED=1
+          elif [[ "${{ needs.build-and-test-backend.result }}" == "skipped" ]]; then
+            echo "⏭️  Build & Test skipped (no backend changes)"
+          else
+            echo "✅ Build & Test passed"
           fi
 
           # 4. Integration Test - CRITICAL (if ran)
           if [[ "${{ needs.integration-test.result }}" == "failure" ]]; then
             echo "❌ CRITICAL: Integration tests failed!"
             CRITICAL_FAILED=1
+          elif [[ "${{ needs.integration-test.result }}" == "skipped" ]]; then
+            echo "⏭️  Integration tests skipped"
+          else
+            echo "✅ Integration tests passed"
           fi
 
           # SonarCloud - INFORMATIONAL (warning only)

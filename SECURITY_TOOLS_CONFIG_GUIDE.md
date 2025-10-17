@@ -22,11 +22,13 @@ This document explains the configuration files for each security scanning tool i
 | **Gitleaks**               | `.gitleaks.toml`                   | ❌ No     | Custom secret patterns, allowlists |
 | **OWASP Dependency-Check** | None                               | ❌ No     | Uses CLI arguments in workflow     |
 | **CodeQL**                 | `.github/codeql/codeql-config.yml` | ❌ No     | Custom queries (uses defaults)     |
-| **Trivy**                  | `.trivy.yaml`                      | ❌ No     | Scan settings, severity levels     |
+| **Trivy**                  | `.trivy.yaml`                      | ❌ No     | Vuln/config scanning only          |
 | **Checkov**                | `.checkov.yml`                     | ❌ No     | Framework selection, policies      |
 | **SonarCloud**             | `sonar-project.properties`         | ✅ Yes\*  | Project configuration              |
 
 \*SonarCloud needs basic project configuration, which you already have.
+
+**Note:** Trivy's secret scanning has been disabled - Gitleaks handles all secret detection to avoid redundancy.
 
 ---
 
