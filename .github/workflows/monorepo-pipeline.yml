@@ -623,6 +623,9 @@ jobs:
 
       - name: Create Integration Test Environment
         run: |
+          # Ensure required Docker volume directories exist
+          mkdir -p ./data/redis
+          mkdir -p ./data/postgres
           echo "Setting up integration test environment..."
 
           cat > .env << EOF
