@@ -33,9 +33,9 @@ jobs:
     outputs:
       should_deploy: ${{ steps.check.outputs.should_deploy }}
       version: ${{ steps.version.outputs.version }}
-      backend_changed: ${{ steps.changes.outputs.backend }}
-      shared_changed: ${{ steps.changes.outputs.shared }}
-      any_changed: ${{ steps.changes.outputs.any }}
+      backend_changed: ${{ steps.changes.outputs.backend == 'true' && 'true' || 'false' }}
+      shared_changed: ${{ steps.changes.outputs.shared == 'true' && 'true' || 'false' }}
+      any_changed: ${{ steps.changes.outputs.any == 'true' && 'true' || 'false' }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v5
