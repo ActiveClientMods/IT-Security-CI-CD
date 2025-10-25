@@ -515,8 +515,10 @@ jobs:
           for trivy_file in trivy-*-${{ matrix.service }}-results.sarif; do
             if [ -f "$trivy_file" ]; then
               echo "Checking $trivy_file"
-              CRIT=$(jq '[.runs[]?.results[]? // empty | select(.level=="error")] | length' "$trivy_file" 2>/dev/null || echo "0")
-              HIGH=$(jq '[.runs[]?.results[]? // empty | select(.level=="warning")] | length' "$trivy_file" 2>/dev/null || echo "0")
+              # Count CRITICAL vulnerabilities (CVSS >= 9)
+              CRIT=$(jq '[.runs[]?.results[]? // empty | select(.properties."security-severity" | tonumber >= 9)] | length' "$trivy_file" 2>/dev/null || echo "0")
+              # Count HIGH vulnerabilities (CVSS >= 7 and < 9)
+              HIGH=$(jq '[.runs[]?.results[]? // empty | select(.properties."security-severity" | tonumber >= 7 and .properties."security-severity" | tonumber < 9)] | length' "$trivy_file" 2>/dev/null || echo "0")
               CRITICAL_COUNT=$((CRITICAL_COUNT + CRIT))
               HIGH_COUNT=$((HIGH_COUNT + HIGH))
               echo "File: $trivy_file - Critical: $CRIT, High: $HIGH"
