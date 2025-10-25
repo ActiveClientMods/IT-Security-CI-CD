@@ -96,16 +96,23 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: Run Gitleaks Scan (nestjs_backend/src only)
-        uses: gitleaks/gitleaks-action@v2
+      - name: Install Gitleaks
+        run: |
+          curl -sSL https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks-linux-amd64.tar.gz | tar -xz
+          sudo mv gitleaks /usr/local/bin/
+
+      - name: Run Gitleaks on nestjs_backend/src only
+        run: |
+          gitleaks dir -v nestjs_backend/src \
+            --config .gitleaks.toml \
+            --report-format sarif \
+            --report-path gitleaks.sarif
+
+      - name: Upload Gitleaks Report
+        uses: actions/upload-artifact@v4
         with:
-          args: dir -v nestjs_backend/src --report-format sarif --report-path gitleaks.sarif
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_CONFIG: .gitleaks.toml
-          GITLEAKS_ENABLE_COMMENTS: false
-          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: true
-          GITLEAKS_ENABLE_SUMMARY: true
+          name: gitleaks-report
+          path: gitleaks.sarif
 
   # ==========================================
   # JOB 3: Backend Dependency Vulnerability Scanning
