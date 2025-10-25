@@ -96,34 +96,14 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: Install Gitleaks
-        shell: bash
-        run: |
-          # Get latest version
-          GITLEAKS_VERSION=$(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep '"tag_name":' | cut -d '"' -f4)
-          echo "Installing Gitleaks $GITLEAKS_VERSION"
-
-          # Remove leading "v" from version string
-          GITLEAKS_VER_NO_V="${GITLEAKS_VERSION#v}"
-
-          # Download and extract
-          curl -sSL -o gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VER_NO_V}_linux_x64.tar.gz
-          tar -xzf gitleaks.tar.gz
-          sudo mv gitleaks /usr/local/bin/gitleaks
-          gitleaks version
-
-      - name: Run Gitleaks on nestjs_backend/src only
-        run: |
-          gitleaks dir -v nestjs_backend/src \
-            --config .gitleaks.toml \
-            --report-format sarif \
-            --report-path gitleaks.sarif
-
-      - name: Upload Gitleaks Report
-        uses: actions/upload-artifact@v4
-        with:
-          name: gitleaks-report
-          path: gitleaks.sarif
+      - name: Run Gitleaks Scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+          GITLEAKS_ENABLE_COMMENTS: false
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: true
+          GITLEAKS_ENABLE_SUMMARY: true
 
   # ==========================================
   # JOB 3: Backend Dependency Vulnerability Scanning
@@ -510,7 +490,7 @@ jobs:
           format: "sarif"
           output: "trivy-fs-${{ matrix.service }}-results.sarif"
           severity: "CRITICAL,HIGH,MEDIUM"
-          scanners: "vuln,config"
+          scanners: "vuln,misconfig"
 
       - name: Run Trivy Container Image Scan (${{ matrix.service }})
         uses: aquasecurity/trivy-action@master
@@ -520,7 +500,7 @@ jobs:
           format: "sarif"
           output: "trivy-image-${{ matrix.service }}-results.sarif"
           severity: "CRITICAL,HIGH,MEDIUM"
-          scanners: "vuln,config"
+          scanners: "vuln,misconfig"
 
       - name: Check Trivy Results for Critical/High Vulnerabilities
         id: check-trivy
