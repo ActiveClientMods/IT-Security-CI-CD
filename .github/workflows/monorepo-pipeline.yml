@@ -97,10 +97,17 @@ jobs:
           fetch-depth: 2
 
       - name: Install Gitleaks
+        shell: bash
         run: |
-          GITLEAKS_VERSION=$(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep tag_name | cut -d '"' -f   4)
+          # Get latest version
+          GITLEAKS_VERSION=$(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep '"tag_name":' | cut -d '"' -f4)
           echo "Installing Gitleaks $GITLEAKS_VERSION"
-          curl -sSL -o gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/${GITLEAKS_VERSION}/gitleaks_$  {GITLEAKS_VERSION#v}_linux_x64.tar.gz
+
+          # Remove leading "v" from version string
+          GITLEAKS_VER_NO_V="${GITLEAKS_VERSION#v}"
+
+          # Download and extract
+          curl -sSL -o gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VER_NO_V}_linux_x64.tar.gz
           tar -xzf gitleaks.tar.gz
           sudo mv gitleaks /usr/local/bin/gitleaks
           gitleaks version
