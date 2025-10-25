@@ -1,4 +1,4 @@
-ARG NODE_VERSION=20
+ARG NODE_VERSION=25
 ARG ALPINE_VERSION=3.21
 
 # ---------- Build Stage ----------
