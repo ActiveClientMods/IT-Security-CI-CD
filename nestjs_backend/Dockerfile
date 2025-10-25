@@ -1,5 +1,5 @@
-ARG NODE_VERSION = 25
-ARG ALPINE_VERSION = 3.21
+ARG NODE_VERSION=25
+ARG ALPINE_VERSION=3.21
 
 # ---------- Build Stage ----------
 FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS builder
