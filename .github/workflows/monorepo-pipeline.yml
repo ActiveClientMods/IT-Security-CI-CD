@@ -82,7 +82,6 @@ jobs:
   # ==========================================
   # JOB 2: Secret Scanning with Gitleaks
   # ==========================================
-  # CRITICAL: Scans last 2 commits for secrets
   gitleaks-scan:
     name: GitLeaks Secret Scanning
     runs-on: ubuntu-latest
@@ -95,7 +94,7 @@ jobs:
       - name: Checkout Code (Last 2 Commits)
         uses: actions/checkout@v5
         with:
-          fetch-depth: 2 # Scan last 2 commits
+          fetch-depth: 2
 
       - name: Run Gitleaks Scan
         uses: gitleaks/gitleaks-action@v2
@@ -105,12 +104,6 @@ jobs:
           GITLEAKS_ENABLE_COMMENTS: false
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: true
           GITLEAKS_ENABLE_SUMMARY: true
-
-      # Note: The gitleaks-action automatically:
-      # - Uploads results as artifacts
-      # - Generates a summary
-      # - Uploads SARIF to GitHub Security tab
-      # - Fails the job if secrets are detected
 
   # ==========================================
   # JOB 3: Backend Dependency Vulnerability Scanning
@@ -137,7 +130,7 @@ jobs:
       - name: Run OWASP Dependency Check (SARIF)
         id: owasp-sarif
         uses: dependency-check/Dependency-Check_Action@main
-        continue-on-error: true # Continue to generate both reports
+        continue-on-error: true
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         with:
@@ -153,7 +146,7 @@ jobs:
       - name: Run OWASP Dependency Check (JSON for parsing)
         id: owasp-json
         uses: dependency-check/Dependency-Check_Action@main
-        continue-on-error: true # Continue to upload reports
+        continue-on-error: true
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         with:
@@ -293,7 +286,7 @@ jobs:
             UNLICENSED_PACKAGES=$(license-checker --json | jq -r 'to_entries[] | select(.value.licenses == "UNLICENSED") | .key')
             
             for package in $UNLICENSED_PACKAGES; do
-              if [[ "$package" == nestjs_backend* ]]; then
+              if [[ "$package" == nestjs_backend* ]] || [[ "$package" == *"@workspace"* ]]; then
                 echo "✅ INFO: $package is our own private package (expected UNLICENSED status)"
               else
                 echo "❌ CRITICAL: $package is an external package without a license!"
@@ -372,7 +365,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        # Remove continue-on-error to properly fail the job
 
       - name: Check Quality Gate
         if: success()
@@ -395,29 +387,47 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v5
 
+      - name: Create Checkov Output Directory
+        run: mkdir -p checkov-output
+
       - name: Run Checkov
+        id: checkov
         uses: bridgecrewio/checkov-action@master
+        continue-on-error: true
         with:
           directory: .
           framework: all
-          output_format: sarif,json
-          output_file_path: checkov-report
+          output_format: sarif,json,cli
+          output_file_path: checkov-output
           soft_fail: true
-          quiet: true
+          quiet: false
           compact: true
+
+      - name: List Checkov Output Files
+        if: always()
+        run: |
+          echo "=== Checkov Output Directory Contents ==="
+          ls -la checkov-output/ || echo "Directory not found"
+          echo "=== Current Directory Contents ==="
+          ls -la . | grep checkov || echo "No checkov files in current directory"
 
       - name: Upload Checkov Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: checkov-report
-          path: checkov-report.*
+          path: |
+            checkov-output/
+            results_sarif.sarif
+            results_json.json
+          if-no-files-found: warn
 
       - name: Upload SARIF to GitHub Security
-        if: always() && hashFiles('checkov-report.sarif') != ''
+        if: always()
         uses: github/codeql-action/upload-sarif@v4
+        continue-on-error: true
         with:
-          sarif_file: checkov-report.sarif
+          sarif_file: checkov-output/results_sarif.sarif
           category: checkov
 
   # ==========================================
@@ -480,7 +490,7 @@ jobs:
           format: "sarif"
           output: "trivy-fs-${{ matrix.service }}-results.sarif"
           severity: "CRITICAL,HIGH,MEDIUM"
-          scanners: "vuln,config" # Removed 'secret' - handled by Gitleaks
+          scanners: "vuln,config"
 
       - name: Run Trivy Container Image Scan (${{ matrix.service }})
         uses: aquasecurity/trivy-action@master
@@ -490,7 +500,7 @@ jobs:
           format: "sarif"
           output: "trivy-image-${{ matrix.service }}-results.sarif"
           severity: "CRITICAL,HIGH,MEDIUM"
-          scanners: "vuln,config" # Removed 'secret' - handled by Gitleaks
+          scanners: "vuln,config"
 
       - name: Upload Trivy Results (${{ matrix.service }})
         if: always()
@@ -535,7 +545,6 @@ jobs:
         run: |
           echo "Setting up integration test environment..."
 
-          # Create basic .env file for integration testing
           cat > .env << EOF
           NODE_ENV=production
           PORT=3000
@@ -565,7 +574,6 @@ jobs:
           docker compose ps
 
           echo "🧪 Running basic integration tests..."
-          # Wait for backend to be fully ready
           for i in 1 2 3 4 5; do
             if curl -f http://localhost:3000/health 2>/dev/null; then
               echo "✅ Backend health check passed"
@@ -576,7 +584,6 @@ jobs:
             fi
           done
 
-          # Final health check
           curl -f http://localhost:3000/health || echo "❌ Backend health check failed after multiple attempts"
 
       - name: Setup pnpm and Node.js for Testing
@@ -588,7 +595,6 @@ jobs:
           echo "Running complete NestJS test suite against live services..."
           echo "This includes both unit tests and E2E integration tests"
 
-          # Set up Node.js environment for testing
           export NODE_ENV=test
           export DATABASE_URL="postgresql://appuser:apppass@localhost:5432/appdb"
           export REDIS_URL="redis://:redispass@localhost:6379"
@@ -597,7 +603,6 @@ jobs:
           UNIT_TEST_OUTPUT=$(pnpm exec jest --coverage --coverageReporters=json --coverageReporters=lcov --passWithNoTests --verbose 2>&1)
           UNIT_TEST_EXIT_CODE=$?
 
-          # Save test results to file for artifact upload
           echo "$UNIT_TEST_OUTPUT" > unit-test-results.txt
           echo "=== UNIT TEST EXECUTION SUMMARY ===" >> test-results-summary.txt
           echo "$UNIT_TEST_OUTPUT" >> test-results-summary.txt
@@ -605,20 +610,17 @@ jobs:
 
           if [ $UNIT_TEST_EXIT_CODE -eq 0 ]; then
             echo "✅ Unit tests passed with coverage"
-            echo "Test results saved to unit-test-results.txt"
           elif echo "$UNIT_TEST_OUTPUT" | grep -q "No tests found"; then
             echo "⚠️ No unit tests found - skipping"
           else
             echo "❌ Unit tests failed:"
             echo "$UNIT_TEST_OUTPUT"
-            echo "Continuing with E2E tests..."
           fi
 
           echo "Running end-to-end integration tests..."
           E2E_TEST_OUTPUT=$(pnpm exec jest --config ./test/jest-e2e.json --passWithNoTests --verbose 2>&1)
           E2E_TEST_EXIT_CODE=$?
 
-          # Save E2E test results to file for artifact upload
           echo "$E2E_TEST_OUTPUT" > e2e-test-results.txt
           echo "=== E2E INTEGRATION TEST EXECUTION SUMMARY ===" >> test-results-summary.txt
           echo "$E2E_TEST_OUTPUT" >> test-results-summary.txt
@@ -626,13 +628,11 @@ jobs:
 
           if [ $E2E_TEST_EXIT_CODE -eq 0 ]; then
             echo "✅ E2E integration tests passed"
-            echo "E2E test results saved to e2e-test-results.txt"
           elif echo "$E2E_TEST_OUTPUT" | grep -q "No tests found"; then
-            echo "⚠️ No e2e tests found - skipping (this is normal for new projects)"
+            echo "⚠️ No e2e tests found - skipping"
           else
             echo "❌ E2E integration tests failed:"
             echo "$E2E_TEST_OUTPUT"
-            echo "Note: E2E test failures won't block the pipeline but should be investigated"
           fi
 
           echo "✅ Complete test suite finished"
@@ -659,15 +659,12 @@ jobs:
         run: |
           echo "Collecting docker compose logs..."
 
-          # Show current container status
           echo "=== Container Status ===" > docker-compose-logs.txt
           docker compose ps >> docker-compose-logs.txt 2>&1 || echo "Failed to get container status" >> docker-compose-logs.txt
 
-          # Collect logs from all services
           echo -e "\n=== Service Logs ===" >> docker-compose-logs.txt
           docker compose logs >> docker-compose-logs.txt 2>&1 || echo "Failed to collect logs" >> docker-compose-logs.txt
 
-          # Clean up
           echo "🧹 Cleaning up services..."
           docker compose down --volumes --remove-orphans || echo "Failed to clean up services"
 
@@ -730,64 +727,12 @@ jobs:
             if [ "$GITLEAKS_COUNT" -gt 0 ]; then
               CRITICAL_COUNT=$((CRITICAL_COUNT + GITLEAKS_COUNT))
               GITLEAKS_DETAILS=$(jq -r '[.runs[]?.results[]? // empty] | group_by(.ruleId) | map("\(.length)x \(.[0].ruleId)") | join(", ")' "$GITLEAKS_SARIF" 2>/dev/null || echo "")
-              FINDINGS="${FINDINGS}### 🔴 Gitleaks: $GITLEAKS_COUNT secret(s) detected\n"
-              if [ -n "$GITLEAKS_DETAILS" ]; then
-                FINDINGS="${FINDINGS}**Details:** $GITLEAKS_DETAILS\n"
-              fi
-            else
-              FINDINGS="${FINDINGS}### ✅ Gitleaks: No secrets detected\n"
-            fi
-          else
-            echo "No Gitleaks SARIF found"
-            FINDINGS="${FINDINGS}### ⚠️ Gitleaks: Report not found\n"
-          fi
-
-          # 2. Parse Backend OWASP Dependency Check
-          echo "Checking OWASP Dependency Check results..."
-          OWASP_JSON=$(find security-reports -path "*/reports-json/dependency-check-report.json" 2>/dev/null | head -1)
-          if [ -n "$OWASP_JSON" ] && [ -f "$OWASP_JSON" ]; then
-            echo "Found OWASP JSON: $OWASP_JSON"
-            DEP_CRITICAL=$(jq '[.dependencies[]?.vulnerabilities[]? | select(.severity=="CRITICAL")] | length' "$OWASP_JSON" 2>/dev/null || echo "0")
-            DEP_HIGH=$(jq '[.dependencies[]?.vulnerabilities[]? | select(.severity=="HIGH")] | length' "$OWASP_JSON" 2>/dev/null || echo "0")
-            DEP_MEDIUM=$(jq '[.dependencies[]?.vulnerabilities[]? | select(.severity=="MEDIUM")] | length' "$OWASP_JSON" 2>/dev/null || echo "0")
-            
-            CRITICAL_COUNT=$((CRITICAL_COUNT + DEP_CRITICAL))
-            HIGH_COUNT=$((HIGH_COUNT + DEP_HIGH))
-            MEDIUM_COUNT=$((MEDIUM_COUNT + DEP_MEDIUM))
-            
-            if [ "$DEP_CRITICAL" -gt 0 ] || [ "$DEP_HIGH" -gt 0 ]; then
-              FINDINGS="${FINDINGS}### 🔴 Backend OWASP Dependency Check: $DEP_CRITICAL critical, $DEP_HIGH high, $DEP_MEDIUM medium\n"
-              
-              # Extract top vulnerabilities
-              TOP_VULNS=$(jq -r '[.dependencies[]?.vulnerabilities[]? | select(.severity=="CRITICAL" or .severity=="HIGH")] | sort_by(.cvssv3.baseScore // 0) | reverse | limit(5; .[]) | "- **\(.name // .source.name)** (\(.severity), CVSS: \(.cvssv3.baseScore // "N/A"))"' "$OWASP_JSON" 2>/dev/null || echo "")
-              if [ -n "$TOP_VULNS" ]; then
-                FINDINGS="${FINDINGS}**Top Issues:**\n$TOP_VULNS\n"
-              fi
-            else
-              FINDINGS="${FINDINGS}### ✅ Backend OWASP Dependency Check: No critical/high vulnerabilities ($DEP_MEDIUM medium)\n"
-            fi
-          else
-            echo "No OWASP JSON found"
-            if [[ "${{ needs.backend-dependency-check.result }}" == "skipped" ]]; then
-              FINDINGS="${FINDINGS}### ⏭️ Backend OWASP Dependency Check: Skipped (no backend changes)\n"
-            else
-              FINDINGS="${FINDINGS}### ⚠️ Backend OWASP Dependency Check: Report not found\n"
-            fi
-          fi
-
-          # 3. Parse SonarCloud results (from job status)
-          echo "Checking SonarCloud results..."
-          if [[ "${{ needs.sonarcloud.result }}" == "failure" ]]; then
-            FINDINGS="${FINDINGS}### 🟠 SonarCloud Quality Gate: FAILED\n"
-            FINDINGS="${FINDINGS}**Status:** Code quality issues detected. Check [SonarCloud Dashboard](https://sonarcloud.io/dashboard?id=ActiveClientMods_IT-Security-CI-CD)\n"
-            HIGH_COUNT=$((HIGH_COUNT + 1))
-          elif [[ "${{ needs.sonarcloud.result }}" == "success" ]]; then
-            FINDINGS="${FINDINGS}### ✅ SonarCloud Quality Gate: PASSED\n"
+              FINDINGS="${FINDINGS}### ✅ SonarCloud Quality Gate: PASSED\n"
           elif [[ "${{ needs.sonarcloud.result }}" == "skipped" ]]; then
             FINDINGS="${FINDINGS}### ⏭️ SonarCloud Quality Gate: Skipped\n"
           fi
 
-          # 4. Parse CodeQL results (from job status)
+          # 4. Parse CodeQL results
           echo "Checking CodeQL results..."
           if [[ "${{ needs.codeql-analysis.result }}" == "success" ]]; then
             FINDINGS="${FINDINGS}### ✅ CodeQL Security Analysis: Completed\n"
@@ -814,20 +759,53 @@ jobs:
 
           # 6. Parse Checkov IaC scan
           echo "Checking Checkov results..."
-          CHECKOV_JSON=$(find security-reports -name "checkov-report.json" 2>/dev/null | head -1)
+          CHECKOV_JSON=$(find security-reports -path "*/checkov-output/results_json.json" -o -name "results_json.json" 2>/dev/null | head -1)
+          if [ -z "$CHECKOV_JSON" ]; then
+            CHECKOV_JSON=$(find security-reports -name "*json.json" -path "*/checkov*" 2>/dev/null | head -1)
+          fi
+
           if [ -n "$CHECKOV_JSON" ] && [ -f "$CHECKOV_JSON" ]; then
             echo "Found Checkov JSON: $CHECKOV_JSON"
-            CHECKOV_FAILED=$(jq '.summary.failed // 0' "$CHECKOV_JSON" 2>/dev/null || echo "0")
-            CHECKOV_PASSED=$(jq '.summary.passed // 0' "$CHECKOV_JSON" 2>/dev/null || echo "0")
+            
+            CHECKOV_FAILED=0
+            CHECKOV_PASSED=0
+            CHECKOV_DETAILS=""
+            
+            for check_type in dockerfile terraform kubernetes github_actions; do
+              TYPE_FAILED=$(jq -r "select(.check_type==\"$check_type\") | .summary.failed // 0" "$CHECKOV_JSON" 2>/dev/null || echo "0")
+              TYPE_PASSED=$(jq -r "select(.check_type==\"$check_type\") | .summary.passed // 0" "$CHECKOV_JSON" 2>/dev/null || echo "0")
+              
+              if [ "$TYPE_FAILED" != "0" ] || [ "$TYPE_PASSED" != "0" ]; then
+                CHECKOV_FAILED=$((CHECKOV_FAILED + TYPE_FAILED))
+                CHECKOV_PASSED=$((CHECKOV_PASSED + TYPE_PASSED))
+                
+                if [ "$TYPE_FAILED" -gt 0 ]; then
+                  FAILED_CHECKS=$(jq -r "select(.check_type==\"$check_type\") | .results.failed_checks[]? | \"- **\(.check_name)** (\(.check_id)) in \(.file_path)\"" "$CHECKOV_JSON" 2>/dev/null | head -5)
+                  if [ -n "$FAILED_CHECKS" ]; then
+                    CHECKOV_DETAILS="${CHECKOV_DETAILS}\n**${check_type} issues:**\n${FAILED_CHECKS}\n"
+                  fi
+                fi
+              fi
+            done
             
             if [ "$CHECKOV_FAILED" -gt 0 ]; then
               FINDINGS="${FINDINGS}### 🟡 Checkov IaC Security: $CHECKOV_FAILED failed checks, $CHECKOV_PASSED passed\n"
+              if [ -n "$CHECKOV_DETAILS" ]; then
+                FINDINGS="${FINDINGS}${CHECKOV_DETAILS}"
+              fi
               MEDIUM_COUNT=$((MEDIUM_COUNT + CHECKOV_FAILED))
             else
               FINDINGS="${FINDINGS}### ✅ Checkov IaC Security: All checks passed ($CHECKOV_PASSED)\n"
             fi
           else
-            FINDINGS="${FINDINGS}### ✅ Checkov IaC Security: Scan completed\n"
+            echo "No Checkov JSON found, checking job status..."
+            if [[ "${{ needs.checkov-iac-scan.result }}" == "success" ]]; then
+              FINDINGS="${FINDINGS}### ✅ Checkov IaC Security: Scan completed\n"
+            elif [[ "${{ needs.checkov-iac-scan.result }}" == "failure" ]]; then
+              FINDINGS="${FINDINGS}### 🟡 Checkov IaC Security: Issues detected (report not found)\n"
+            else
+              FINDINGS="${FINDINGS}### ⏭️ Checkov IaC Security: Skipped\n"
+            fi
           fi
 
           # 7. Parse Trivy Container Scans
@@ -871,14 +849,14 @@ jobs:
 
           # Create summary
           cat > security-summary.md <<EOF
-          # Monorepo Security Scan Summary
+          # 🔒 Monorepo Security Scan Summary
 
           **Pipeline Run:** #${{ github.run_number }}
           **Branch:** \`${{ github.ref_name }}\`
           **Commit:** \`${{ github.sha }}\`
           **Backend Changed:** ${{ needs.initialize.outputs.backend_changed }}
 
-          ## Vulnerability Overview
+          ## 📊 Vulnerability Overview
 
           | Severity | Count |
           |----------|-------|
@@ -887,19 +865,19 @@ jobs:
           | 🟡 Medium | **$MEDIUM_COUNT** |
           | 🔵 Low | **$LOW_COUNT** |
 
-          ## Scan Results
+          ## 🔍 Scan Results
 
           $FINDINGS
 
-          ## Components Analyzed
+          ## 📦 Components Analyzed
 
           - **NestJS Backend** (\`nestjs_backend/\`): API server security analysis
           - **Infrastructure**: Docker, docker-compose.yml, environment configuration
           - **Shared Resources**: Root-level configuration and secrets
-          - **Dependencies**: npm packages vulnerability scanning
+          - **Dependencies**: pnpm packages vulnerability scanning
           - **Code Quality**: Static analysis and security patterns
 
-          ## Detailed Reports
+          ## 📄 Detailed Reports
 
           All detailed reports are available as artifacts in this workflow run.
           - [View GitHub Security Tab](https://github.com/${{ github.repository }}/security)
@@ -1004,7 +982,6 @@ jobs:
           echo "🔍 Monorepo Pipeline Quality Gate"
           echo "=================================="
 
-          # Job status overview
           echo ""
           echo "Job Status:"
           echo "  Gitleaks:            ${{ needs.gitleaks-scan.result }}"
@@ -1015,10 +992,8 @@ jobs:
           echo "  Security Summary:    ${{ needs.security-summary.result }}"
           echo ""
 
-          # Critical security checks (MUST pass)
           CRITICAL_FAILED=0
 
-          # 1. Gitleaks - CRITICAL (always runs)
           if [[ "${{ needs.gitleaks-scan.result }}" == "failure" ]]; then
             echo "❌ CRITICAL: Gitleaks secret scanning failed - secrets detected!"
             CRITICAL_FAILED=1
@@ -1026,7 +1001,6 @@ jobs:
             echo "✅ Gitleaks passed - no secrets detected"
           fi
 
-          # 2. OWASP Dependency Check - CRITICAL (if backend changed)
           if [[ "${{ needs.backend-dependency-check.result }}" == "failure" ]]; then
             echo "❌ CRITICAL: OWASP Dependency Check failed - critical vulnerabilities detected!"
             CRITICAL_FAILED=1
@@ -1036,7 +1010,6 @@ jobs:
             echo "✅ OWASP Dependency Check passed"
           fi
 
-          # 3. Build & Test - CRITICAL (if backend changed)
           if [[ "${{ needs.build-and-test-backend.result }}" == "failure" ]]; then
             echo "❌ CRITICAL: Build and test failed!"
             CRITICAL_FAILED=1
@@ -1046,7 +1019,6 @@ jobs:
             echo "✅ Build & Test passed"
           fi
 
-          # 4. Integration Test - CRITICAL (if ran)
           if [[ "${{ needs.integration-test.result }}" == "failure" ]]; then
             echo "❌ CRITICAL: Integration tests failed!"
             CRITICAL_FAILED=1
@@ -1056,12 +1028,10 @@ jobs:
             echo "✅ Integration tests passed"
           fi
 
-          # SonarCloud - INFORMATIONAL (warning only)
           if [[ "${{ needs.sonarcloud.result }}" == "failure" ]]; then
             echo "⚠️  WARNING: SonarCloud Quality Gate failed (informational)"
           fi
 
-          # Final decision
           echo ""
           if [ $CRITICAL_FAILED -eq 1 ]; then
             echo "=================================="
@@ -1084,4 +1054,55 @@ jobs:
           echo "   • All security checks passed"
           echo "   • Build and tests passed"
           echo "   • Quality gate passed"
-          echo "   • Ready for deployment"
+          echo "   • Ready for deployment"🔴 Gitleaks: $GITLEAKS_COUNT secret(s) detected\n"
+              if [ -n "$GITLEAKS_DETAILS" ]; then
+                FINDINGS="${FINDINGS}**Details:** $GITLEAKS_DETAILS\n"
+              fi
+            else
+              FINDINGS="${FINDINGS}### ✅ Gitleaks: No secrets detected\n"
+            fi
+          else
+            echo "No Gitleaks SARIF found"
+            FINDINGS="${FINDINGS}### ⚠️ Gitleaks: Report not found\n"
+          fi
+
+          # 2. Parse Backend OWASP Dependency Check
+          echo "Checking OWASP Dependency Check results..."
+          OWASP_JSON=$(find security-reports -path "*/reports-json/dependency-check-report.json" 2>/dev/null | head -1)
+          if [ -n "$OWASP_JSON" ] && [ -f "$OWASP_JSON" ]; then
+            echo "Found OWASP JSON: $OWASP_JSON"
+            DEP_CRITICAL=$(jq '[.dependencies[]?.vulnerabilities[]? | select(.severity=="CRITICAL")] | length' "$OWASP_JSON" 2>/dev/null || echo "0")
+            DEP_HIGH=$(jq '[.dependencies[]?.vulnerabilities[]? | select(.severity=="HIGH")] | length' "$OWASP_JSON" 2>/dev/null || echo "0")
+            DEP_MEDIUM=$(jq '[.dependencies[]?.vulnerabilities[]? | select(.severity=="MEDIUM")] | length' "$OWASP_JSON" 2>/dev/null || echo "0")
+            
+            CRITICAL_COUNT=$((CRITICAL_COUNT + DEP_CRITICAL))
+            HIGH_COUNT=$((HIGH_COUNT + DEP_HIGH))
+            MEDIUM_COUNT=$((MEDIUM_COUNT + DEP_MEDIUM))
+            
+            if [ "$DEP_CRITICAL" -gt 0 ] || [ "$DEP_HIGH" -gt 0 ]; then
+              FINDINGS="${FINDINGS}### 🔴 Backend OWASP Dependency Check: $DEP_CRITICAL critical, $DEP_HIGH high, $DEP_MEDIUM medium\n"
+              
+              TOP_VULNS=$(jq -r '[.dependencies[]?.vulnerabilities[]? | select(.severity=="CRITICAL" or .severity=="HIGH")] | sort_by(.cvssv3.baseScore // 0) | reverse | limit(5; .[]) | "- **\(.name // .source.name)** (\(.severity), CVSS: \(.cvssv3.baseScore // "N/A"))"' "$OWASP_JSON" 2>/dev/null || echo "")
+              if [ -n "$TOP_VULNS" ]; then
+                FINDINGS="${FINDINGS}**Top Issues:**\n$TOP_VULNS\n"
+              fi
+            else
+              FINDINGS="${FINDINGS}### ✅ Backend OWASP Dependency Check: No critical/high vulnerabilities ($DEP_MEDIUM medium)\n"
+            fi
+          else
+            echo "No OWASP JSON found"
+            if [[ "${{ needs.backend-dependency-check.result }}" == "skipped" ]]; then
+              FINDINGS="${FINDINGS}### ⏭️ Backend OWASP Dependency Check: Skipped (no backend changes)\n"
+            else
+              FINDINGS="${FINDINGS}### ⚠️ Backend OWASP Dependency Check: Report not found\n"
+            fi
+          fi
+
+          # 3. Parse SonarCloud results
+          echo "Checking SonarCloud results..."
+          if [[ "${{ needs.sonarcloud.result }}" == "failure" ]]; then
+            FINDINGS="${FINDINGS}### 🟠 SonarCloud Quality Gate: FAILED\n"
+            FINDINGS="${FINDINGS}**Status:** Code quality issues detected. Check [SonarCloud Dashboard](https://sonarcloud.io/dashboard?id=ActiveClientMods_IT-Security-CI-CD)\n"
+            HIGH_COUNT=$((HIGH_COUNT + 1))
+          elif [[ "${{ needs.sonarcloud.result }}" == "success" ]]; then
+            FINDINGS="${FINDINGS}###
