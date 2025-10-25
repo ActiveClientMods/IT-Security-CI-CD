@@ -63,7 +63,7 @@ services:
   # Database Service (PostgreSQL)
   database:
     # Security: Using latest stable PostgreSQL version
-    image: postgres:18-alpine3.21
+    image: postgres:17.2-alpine3.21
     environment:
       POSTGRES_DB: ${DB_NAME:-appdb}
       POSTGRES_USER: ${DB_USER:-appuser}
@@ -118,7 +118,7 @@ services:
   # Cache Service (Redis)
   redis:
     # Security: Using latest stable Redis version
-    image: redis:8.2.2-alpine3.22
+    image: redis:7.4.2-alpine3.21
     # Security: Enable password authentication and secure configurations
     command: >
       redis-server
@@ -189,16 +189,8 @@ services:
 volumes:
   postgres_data:
     driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${DATA_PATH:-./data}/postgres
   redis_data:
     driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${DATA_PATH:-./data}/redis
 
 networks:
   app-network:
