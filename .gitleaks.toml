@@ -1,89 +1,382 @@
-# Gitleaks Configuration
-# This file customizes secret detection rules
+# GitLeaks Configuration
+# Place this in your repository root as .gitleaks.toml
 # Documentation: https://github.com/gitleaks/gitleaks
 
-title = "Gitleaks Configuration for IT Security CI/CD Pipeline"
+title = "GitLeaks Configuration for NestJS Monorepo CI/CD Pipeline"
 
-# Global settings
+# ==========================================
+# Extend Default Rules
+# ==========================================
 [extend]
-# Use default gitleaks rules as base
+# Use default gitleaks config as base (v8.25.0+)
 useDefault = true
 
-# Additional custom rules for demo purposes
+# ==========================================
+# Global Allowlists (v8.25.0+ syntax)
+# ==========================================
+[[allowlists]]
+description = "Global allowlist for common false positives"
+
+# Paths to ignore - build artifacts, dependencies, IDE files
+paths = [
+  '''\.git/''',
+  '''node_modules/''',
+  '''vendor/''',
+  '''\.idea/''',
+  '''\.vscode/''',
+  '''coverage/''',
+  '''dist/''',
+  '''build/''',
+  '''\.lock$''',
+  '''package-lock\.json$''',
+  '''yarn\.lock$''',
+  '''pnpm-lock\.yaml$''',
+  '''bun\.lock$''',
+  '''\.png$''',
+  '''\.jpg$''',
+  '''\.jpeg$''',
+  '''\.gif$''',
+  '''\.svg$''',
+  '''\.ico$''',
+  '''\.woff$''',
+  '''\.woff2$''',
+  '''\.ttf$''',
+  '''\.eot$''',
+  '''\.map$''',
+]
+
+# Regex patterns to ignore (checks against the secret/match)
+regexTarget = "match"
+regexes = [
+  # Test/Example data
+  '''test-secret''',
+  '''test-jwt-secret''',
+  '''test-password''',
+  '''example-key''',
+  '''example\.com''',
+  '''localhost''',
+  '''127\.0\.0\.1''',
+  
+  # Common false positives
+  '''AKIA[0-9A-Z]{16}.*EXAMPLE''',
+  '''sk_test_''',  # Stripe test keys
+  '''pk_test_''',  # Stripe test keys
+  
+  # Git commit hashes (40 hex chars)
+  '''^[a-f0-9]{40}$''',
+]
+
+# Stopwords - if these appear in the secret, likely not real
+stopwords = [
+  "test",
+  "example",
+  "fake",
+  "dummy",
+  "sample",
+  "template",
+  "placeholder",
+  "changeme",
+  "your-",
+  "insert",
+  "replace",
+  "mock",
+]
+
+# ==========================================
+# Additional Allowlist for Specific Patterns
+# ==========================================
+[[allowlists]]
+description = "Framework and language specific false positives"
+regexTarget = "line"
+regexes = [
+  '''SHA-256|SHA-1|SHA256|SHA1''',  # Hash algorithm mentions
+  '''[a-f0-9]{40}\s*#.*commit''',   # Git commit hashes in comments
+  '''console\.(log|error|warn)''',  # Logging statements
+]
+
+# ==========================================
+# Custom Rules (Demo & Production)
+# ==========================================
+
+# Generic API Key
+[[rules]]
+id = "generic-api-key"
+description = "Generic API Key Pattern"
+regex = '''(?i)(api[_-]?key|apikey|api[_-]?secret)['":\s]*[=:]\s*['"]?[a-zA-Z0-9_\-]{20,}['"]?'''
+tags = ["api", "key"]
+
+  [[rules.allowlists]]
+  description = "Ignore test/example API keys"
+  regexTarget = "match"
+  regexes = [
+    '''test-''',
+    '''example''',
+    '''your-''',
+    '''changeme''',
+    '''<.*>''',  # Template placeholders
+    '''INSERT_''',
+  ]
+  stopwords = ["test", "example", "fake"]
+
+# Demo API Key (for testing)
 [[rules]]
 id = "demo-api-key"
 description = "Demo API Key Pattern"
 regex = '''(?i)(api[_-]?key|apikey)['\s]*[:=]['\s]*['"]?[a-z0-9_\-]{20,}['"]?'''
 tags = ["api", "key", "demo"]
 
+  [[rules.allowlists]]
+  description = "Ignore test patterns"
+  stopwords = ["test", "example", "demo-only"]
+
+# Hardcoded Password
 [[rules]]
 id = "demo-password"
 description = "Hardcoded Password"
 regex = '''(?i)(password|passwd|pwd)['\s]*[:=]['\s]*['"]?[^\s'"]{8,}['"]?'''
 tags = ["password", "credentials"]
 
+  [[rules.allowlists]]
+  description = "Ignore common test passwords and placeholders"
+  regexTarget = "match"
+  regexes = [
+    '''your-password''',
+    '''<password>''',
+    '''INSERT_PASSWORD''',
+    '''changeme''',
+  ]
+  stopwords = ["test", "example", "placeholder"]
+
+# Generic Secret
 [[rules]]
 id = "demo-secret"
-description = "Generic Secret"
-regex = '''(?i)(secret|token)['\s]*[:=]['\s]*['"]?[a-z0-9_\-]{16,}['"]?'''
+description = "Generic Secret Pattern"
+regex = '''(?i)(secret|token)['\s]*[:=]['\s]*['"]?[a-zA-Z0-9_\-]{16,}['"]?'''
 tags = ["secret", "token"]
 
-# AWS patterns (will detect the hardcoded AWS key)
+  [[rules.allowlists]]
+  description = "Ignore test secrets"
+  stopwords = ["test", "example", "mock"]
+
+# ==========================================
+# AWS Credentials
+# ==========================================
 [[rules]]
 id = "aws-access-key"
-description = "AWS Access Key"
+description = "AWS Access Key ID"
 regex = '''(A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}'''
 tags = ["aws", "access-key"]
 
 [[rules]]
 id = "aws-secret-key"
-description = "AWS Secret Key"
-regex = '''(?i)aws(.{0,20})?['\"][0-9a-zA-Z\/+]{40}['\"]'''
+description = "AWS Secret Access Key"
+regex = '''(?i)aws(.{0,20})?['":\s]*[=:]\s*['"]?[a-zA-Z0-9/+=]{40}['"]?'''
 tags = ["aws", "secret-key"]
 
-# GitHub token pattern (will detect the hardcoded GitHub token)
+# ==========================================
+# GitHub Tokens
+# ==========================================
 [[rules]]
 id = "github-pat"
 description = "GitHub Personal Access Token"
-regex = '''ghp_[0-9a-zA-Z]{36}'''
+regex = '''ghp_[a-zA-Z0-9]{36}'''
 tags = ["github", "token", "pat"]
 
 [[rules]]
 id = "github-oauth"
 description = "GitHub OAuth Token"
-regex = '''gho_[0-9a-zA-Z]{36}'''
+regex = '''gho_[a-zA-Z0-9]{36}'''
 tags = ["github", "token", "oauth"]
 
-# Database connection strings
+[[rules]]
+id = "github-app-token"
+description = "GitHub App Token"
+regex = '''(ghu|ghs)_[a-zA-Z0-9]{36}'''
+tags = ["github", "app", "token"]
+
+[[rules]]
+id = "github-refresh-token"
+description = "GitHub Refresh Token"
+regex = '''ghr_[a-zA-Z0-9]{36}'''
+tags = ["github", "refresh-token"]
+
+# ==========================================
+# Google Cloud
+# ==========================================
+[[rules]]
+id = "google-api-key"
+description = "Google API Key"
+regex = '''AIza[0-9A-Za-z_-]{35}'''
+tags = ["google", "api"]
+
+[[rules]]
+id = "google-oauth"
+description = "Google OAuth Access Token"
+regex = '''ya29\.[0-9A-Za-z_-]{68,}'''
+tags = ["google", "oauth"]
+
+# ==========================================
+# Communication Platforms
+# ==========================================
+[[rules]]
+id = "slack-token"
+description = "Slack Token"
+regex = '''xox[baprs]-[0-9]{10,13}-[0-9]{10,13}-[a-zA-Z0-9]{24,}'''
+tags = ["slack", "token"]
+
+[[rules]]
+id = "slack-webhook"
+description = "Slack Webhook URL"
+regex = '''https://hooks\.slack\.com/services/T[a-zA-Z0-9_]{8,10}/B[a-zA-Z0-9_]{8,10}/[a-zA-Z0-9_]{24}'''
+tags = ["slack", "webhook"]
+
+# ==========================================
+# Payment Services
+# ==========================================
+[[rules]]
+id = "stripe-access-token"
+description = "Stripe API Key"
+regex = '''(?i)(sk|pk)_(live|test)_[a-zA-Z0-9]{24,}'''
+tags = ["stripe", "key"]
+
+  [[rules.allowlists]]
+  description = "Allow Stripe test keys"
+  regexTarget = "match"
+  regexes = [
+    '''_(test)_''',
+  ]
+
+# ==========================================
+# JWT Tokens
+# ==========================================
+[[rules]]
+id = "jwt-token"
+description = "JSON Web Token"
+regex = '''eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}'''
+tags = ["jwt", "token"]
+
+  [[rules.allowlists]]
+  description = "Ignore test JWT tokens"
+  stopwords = ["test", "example", "fake", "mock"]
+
+# ==========================================
+# Private Keys
+# ==========================================
+[[rules]]
+id = "private-key"
+description = "Private Key"
+regex = '''-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----'''
+tags = ["private", "key", "pem"]
+
+# ==========================================
+# Database Connection Strings
+# ==========================================
 [[rules]]
 id = "postgres-connection"
 description = "PostgreSQL Connection String"
-regex = '''(?i)postgres(ql)?://[^:]+:[^@]+@[^/]+/\w+'''
+regex = '''(?i)(postgres|postgresql)://[a-zA-Z0-9_-]+:[^@\s]+@[a-zA-Z0-9.-]+:[0-9]{4,5}/[a-zA-Z0-9_-]+'''
 tags = ["database", "postgresql", "connection-string"]
 
-# Allowlist - paths to ignore (optional)
-[allowlist]
-description = "Global Allowlist"
-# Ignore test files and documentation
-paths = [
-    '''test/fixtures/.*''',
-    '''.*_test\.go''',
-    '''.*\.md''',
-    '''^\.git/''',
-]
+  [[rules.allowlists]]
+  description = "Ignore localhost database URLs"
+  regexTarget = "match"
+  regexes = [
+    '''localhost''',
+    '''127\.0\.0\.1''',
+    '''db:''',  # Docker compose service names
+  ]
 
-# Stop words - reduce false positives
-stopwords = [
-    '''example''',
-    '''sample''',
-    '''dummy''',
-    '''placeholder''',
-]
+[[rules]]
+id = "mysql-connection"
+description = "MySQL Connection String"
+regex = '''(?i)mysql://[a-zA-Z0-9_-]+:[^@\s]+@[a-zA-Z0-9.-]+:[0-9]{4,5}/[a-zA-Z0-9_-]+'''
+tags = ["database", "mysql", "connection-string"]
 
-# Entropy detection for high-randomness strings
+  [[rules.allowlists]]
+  description = "Ignore localhost database URLs"
+  regexTarget = "match"
+  regexes = [
+    '''localhost''',
+    '''127\.0\.0\.1''',
+  ]
+
+[[rules]]
+id = "mongodb-connection"
+description = "MongoDB Connection String"
+regex = '''(?i)mongodb(\+srv)?://[a-zA-Z0-9_-]+:[^@\s]+@[a-zA-Z0-9.-]+/[a-zA-Z0-9_-]+'''
+tags = ["database", "mongodb", "connection-string"]
+
+  [[rules.allowlists]]
+  description = "Ignore localhost database URLs"
+  regexTarget = "match"
+  regexes = [
+    '''localhost''',
+    '''127\.0\.0\.1''',
+  ]
+
+[[rules]]
+id = "redis-connection"
+description = "Redis Connection String"
+regex = '''(?i)redis://:[^@\s]+@[a-zA-Z0-9.-]+:[0-9]{4,5}'''
+tags = ["database", "redis", "connection-string"]
+
+  [[rules.allowlists]]
+  description = "Ignore localhost Redis URLs"
+  regexTarget = "match"
+  regexes = [
+    '''localhost''',
+    '''127\.0\.0\.1''',
+    '''redis:''',  # Docker compose service names
+  ]
+
+# ==========================================
+# High Entropy Detection
+# ==========================================
 [[rules]]
 id = "high-entropy-string"
 description = "High Entropy String (possible secret)"
 regex = '''['"][a-zA-Z0-9+/=]{32,}['"]'''
 entropy = 4.5
 tags = ["entropy", "secret"]
+
+  [[rules.allowlists]]
+  description = "Ignore base64 encoded images and common patterns"
+  regexTarget = "match"
+  regexes = [
+    '''data:image''',
+    '''^[A-Za-z0-9+/=]+$''',  # Pure base64 without context
+  ]
+  stopwords = ["example", "test", "mock"]
+
+# ==========================================
+# NPM/Package Manager Tokens
+# ==========================================
+[[rules]]
+id = "npm-token"
+description = "NPM Access Token"
+regex = '''npm_[a-zA-Z0-9]{36}'''
+tags = ["npm", "token"]
+
+# ==========================================
+# Generic Secret Pattern
+# ==========================================
+[[rules]]
+id = "generic-secret"
+description = "Generic Secret Pattern"
+regex = '''(?i)(secret|password|passwd|pwd|token|api[_-]?key)['":\s]*[=:]\s*['"][^'"\s]{8,}['"]'''
+tags = ["secret", "password", "generic"]
+
+  [[rules.allowlists]]
+  description = "Ignore test/example secrets and environment variable placeholders"
+  regexTarget = "match"
+  regexes = [
+    '''test-''',
+    '''example''',
+    '''your-''',
+    '''changeme''',
+    '''<.*>''',
+    '''INSERT_''',
+    '''\$\{.*\}''',  # Environment variable syntax
+    '''process\.env''',
+  ]
+  stopwords = ["test", "example", "fake", "dummy", "placeholder", "sample"]
