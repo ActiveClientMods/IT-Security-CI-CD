@@ -11,12 +11,12 @@ export class AppController {
     return this.appService.getHello();
   }
 
-  // Vulnerability 3: Command Injection
-  @Get("exec")
-  executeCommand(@Query("cmd") command: string): string {
-    exec(command, (error: Error | null, stdout: string) => {
-      console.log(stdout);
-    });
-    return `Executing command: ${command}`;
-  }
+  // // Vulnerability 3: Command Injection
+  // @Get("exec")
+  // executeCommand(@Query("cmd") command: string): string {
+  //   exec(command, (error: Error | null, stdout: string) => {
+  //     console.log(stdout);
+  //   });
+  //   return `Executing command: ${command}`;
+  // }
 }

@@ -5,8 +5,8 @@ import { AppModule } from "./app.module";
 export async function bootstrap() {
   const logger = new Logger("Main-Application");
 
-  // Vulnerability 1: Hard-coded API KEY
-  const AWS_SECRET_KEY = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+  // // Vulnerability 1: Hard-coded API KEY
+  // const AWS_SECRET_KEY = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
 
   const port = process.env.PORT ?? 3000;
   const app = await NestFactory.create(AppModule);
