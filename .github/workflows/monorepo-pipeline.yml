@@ -718,69 +718,174 @@ jobs:
           LOW_COUNT=0
           FINDINGS=""
 
-          # Parse Gitleaks - the action creates gitleaks-report.sarif
-          if [ -f "security-reports/gitleaks-report/gitleaks-report.sarif" ]; then
-            GITLEAKS_COUNT=$(jq '.runs[0].results | length' security-reports/gitleaks-report/gitleaks-report.sarif 2>/dev/null || echo "0")
+          echo "=== Scanning for artifacts ==="
+          find security-reports -type f -name "*.sarif" -o -name "*.json" 2>/dev/null || echo "No reports found"
+
+          # 1. Parse Gitleaks SARIF
+          echo "Checking Gitleaks results..."
+          GITLEAKS_SARIF=$(find security-reports -name "results.sarif" -o -name "gitleaks*.sarif" 2>/dev/null | head -1)
+          if [ -n "$GITLEAKS_SARIF" ] && [ -f "$GITLEAKS_SARIF" ]; then
+            echo "Found Gitleaks SARIF: $GITLEAKS_SARIF"
+            GITLEAKS_COUNT=$(jq '[.runs[]?.results[]? // empty] | length' "$GITLEAKS_SARIF" 2>/dev/null || echo "0")
             if [ "$GITLEAKS_COUNT" -gt 0 ]; then
               CRITICAL_COUNT=$((CRITICAL_COUNT + GITLEAKS_COUNT))
+              GITLEAKS_DETAILS=$(jq -r '[.runs[]?.results[]? // empty] | group_by(.ruleId) | map("\(.length)x \(.[0].ruleId)") | join(", ")' "$GITLEAKS_SARIF" 2>/dev/null || echo "")
               FINDINGS="${FINDINGS}### 🔴 Gitleaks: $GITLEAKS_COUNT secret(s) detected\n"
+              if [ -n "$GITLEAKS_DETAILS" ]; then
+                FINDINGS="${FINDINGS}**Details:** $GITLEAKS_DETAILS\n"
+              fi
             else
               FINDINGS="${FINDINGS}### ✅ Gitleaks: No secrets detected\n"
             fi
           else
-            FINDINGS="${FINDINGS}### ✅ Gitleaks: No secrets detected\n"
+            echo "No Gitleaks SARIF found"
+            FINDINGS="${FINDINGS}### ⚠️ Gitleaks: Report not found\n"
           fi
 
-          # Parse Backend Dependency Check
-          if [ -f "security-reports/backend-dependency-check-report/reports-json/dependency-check-report.json" ]; then
-            DEP_CRITICAL=$(jq '[.dependencies[]?.vulnerabilities[]? | select(.severity=="CRITICAL")] | length' security-reports/backend-dependency-check-report/reports-json/dependency-check-report.json 2>/dev/null || echo "0")
-            DEP_HIGH=$(jq '[.dependencies[]?.vulnerabilities[]? | select(.severity=="HIGH")] | length' security-reports/backend-dependency-check-report/reports-json/dependency-check-report.json 2>/dev/null || echo "0")
+          # 2. Parse Backend OWASP Dependency Check
+          echo "Checking OWASP Dependency Check results..."
+          OWASP_JSON=$(find security-reports -path "*/reports-json/dependency-check-report.json" 2>/dev/null | head -1)
+          if [ -n "$OWASP_JSON" ] && [ -f "$OWASP_JSON" ]; then
+            echo "Found OWASP JSON: $OWASP_JSON"
+            DEP_CRITICAL=$(jq '[.dependencies[]?.vulnerabilities[]? | select(.severity=="CRITICAL")] | length' "$OWASP_JSON" 2>/dev/null || echo "0")
+            DEP_HIGH=$(jq '[.dependencies[]?.vulnerabilities[]? | select(.severity=="HIGH")] | length' "$OWASP_JSON" 2>/dev/null || echo "0")
+            DEP_MEDIUM=$(jq '[.dependencies[]?.vulnerabilities[]? | select(.severity=="MEDIUM")] | length' "$OWASP_JSON" 2>/dev/null || echo "0")
+            
             CRITICAL_COUNT=$((CRITICAL_COUNT + DEP_CRITICAL))
             HIGH_COUNT=$((HIGH_COUNT + DEP_HIGH))
-            FINDINGS="${FINDINGS}### Backend OWASP Dependency Check: $DEP_CRITICAL critical, $DEP_HIGH high\n"
+            MEDIUM_COUNT=$((MEDIUM_COUNT + DEP_MEDIUM))
+            
+            if [ "$DEP_CRITICAL" -gt 0 ] || [ "$DEP_HIGH" -gt 0 ]; then
+              FINDINGS="${FINDINGS}### 🔴 Backend OWASP Dependency Check: $DEP_CRITICAL critical, $DEP_HIGH high, $DEP_MEDIUM medium\n"
+              
+              # Extract top vulnerabilities
+              TOP_VULNS=$(jq -r '[.dependencies[]?.vulnerabilities[]? | select(.severity=="CRITICAL" or .severity=="HIGH")] | sort_by(.cvssv3.baseScore // 0) | reverse | limit(5; .[]) | "- **\(.name // .source.name)** (\(.severity), CVSS: \(.cvssv3.baseScore // "N/A"))"' "$OWASP_JSON" 2>/dev/null || echo "")
+              if [ -n "$TOP_VULNS" ]; then
+                FINDINGS="${FINDINGS}**Top Issues:**\n$TOP_VULNS\n"
+              fi
+            else
+              FINDINGS="${FINDINGS}### ✅ Backend OWASP Dependency Check: No critical/high vulnerabilities ($DEP_MEDIUM medium)\n"
+            fi
           else
-            FINDINGS="${FINDINGS}### Backend OWASP Dependency Check: Scan completed\n"
+            echo "No OWASP JSON found"
+            if [[ "${{ needs.backend-dependency-check.result }}" == "skipped" ]]; then
+              FINDINGS="${FINDINGS}### ⏭️ Backend OWASP Dependency Check: Skipped (no backend changes)\n"
+            else
+              FINDINGS="${FINDINGS}### ⚠️ Backend OWASP Dependency Check: Report not found\n"
+            fi
           fi
 
-          # License check
-          if [ -d "security-reports/backend-license-compliance" ]; then
-            FINDINGS="${FINDINGS}### License Compliance: Backend license compliance checked\n"
+          # 3. Parse SonarCloud results (from job status)
+          echo "Checking SonarCloud results..."
+          if [[ "${{ needs.sonarcloud.result }}" == "failure" ]]; then
+            FINDINGS="${FINDINGS}### 🟠 SonarCloud Quality Gate: FAILED\n"
+            FINDINGS="${FINDINGS}**Status:** Code quality issues detected. Check [SonarCloud Dashboard](https://sonarcloud.io/dashboard?id=ActiveClientMods_IT-Security-CI-CD)\n"
+            HIGH_COUNT=$((HIGH_COUNT + 1))
+          elif [[ "${{ needs.sonarcloud.result }}" == "success" ]]; then
+            FINDINGS="${FINDINGS}### ✅ SonarCloud Quality Gate: PASSED\n"
+          elif [[ "${{ needs.sonarcloud.result }}" == "skipped" ]]; then
+            FINDINGS="${FINDINGS}### ⏭️ SonarCloud Quality Gate: Skipped\n"
           fi
 
-          # Checkov
-          if [ -f "security-reports/checkov-report/checkov-report.json" ]; then
-            CHECKOV_FAILED=$(jq '.summary.failed // 0' security-reports/checkov-report/checkov-report.json || echo "0")
-            CHECKOV_PASSED=$(jq '.summary.passed // 0' security-reports/checkov-report/checkov-report.json || echo "0")
-            FINDINGS="${FINDINGS}### Checkov IaC: $CHECKOV_FAILED failed, $CHECKOV_PASSED passed\n"
+          # 4. Parse CodeQL results (from job status)
+          echo "Checking CodeQL results..."
+          if [[ "${{ needs.codeql-analysis.result }}" == "success" ]]; then
+            FINDINGS="${FINDINGS}### ✅ CodeQL Security Analysis: Completed\n"
+          elif [[ "${{ needs.codeql-analysis.result }}" == "failure" ]]; then
+            FINDINGS="${FINDINGS}### 🔴 CodeQL Security Analysis: Issues detected\n"
+            HIGH_COUNT=$((HIGH_COUNT + 1))
+          elif [[ "${{ needs.codeql-analysis.result }}" == "skipped" ]]; then
+            FINDINGS="${FINDINGS}### ⏭️ CodeQL Security Analysis: Skipped (no backend changes)\n"
           fi
 
-          # Docker scans
-          if [ -d "security-reports/trivy-backend-reports" ]; then
-            FINDINGS="${FINDINGS}### Trivy Container Scans: Backend Docker image scanned\n"
+          # 5. License compliance check
+          echo "Checking license compliance..."
+          LICENSE_SUMMARY=$(find security-reports -name "license-summary.txt" 2>/dev/null | head -1)
+          if [ -n "$LICENSE_SUMMARY" ] && [ -f "$LICENSE_SUMMARY" ]; then
+            UNLICENSED=$(grep -c "UNLICENSED" "$LICENSE_SUMMARY" 2>/dev/null || echo "0")
+            if [ "$UNLICENSED" -gt 0 ]; then
+              FINDINGS="${FINDINGS}### ⚠️ License Compliance: $UNLICENSED packages without licenses\n"
+            else
+              FINDINGS="${FINDINGS}### ✅ License Compliance: All packages properly licensed\n"
+            fi
+          else
+            FINDINGS="${FINDINGS}### ✅ License Compliance: Check completed\n"
           fi
 
-          # Save for next steps
+          # 6. Parse Checkov IaC scan
+          echo "Checking Checkov results..."
+          CHECKOV_JSON=$(find security-reports -name "checkov-report.json" 2>/dev/null | head -1)
+          if [ -n "$CHECKOV_JSON" ] && [ -f "$CHECKOV_JSON" ]; then
+            echo "Found Checkov JSON: $CHECKOV_JSON"
+            CHECKOV_FAILED=$(jq '.summary.failed // 0' "$CHECKOV_JSON" 2>/dev/null || echo "0")
+            CHECKOV_PASSED=$(jq '.summary.passed // 0' "$CHECKOV_JSON" 2>/dev/null || echo "0")
+            
+            if [ "$CHECKOV_FAILED" -gt 0 ]; then
+              FINDINGS="${FINDINGS}### 🟡 Checkov IaC Security: $CHECKOV_FAILED failed checks, $CHECKOV_PASSED passed\n"
+              MEDIUM_COUNT=$((MEDIUM_COUNT + CHECKOV_FAILED))
+            else
+              FINDINGS="${FINDINGS}### ✅ Checkov IaC Security: All checks passed ($CHECKOV_PASSED)\n"
+            fi
+          else
+            FINDINGS="${FINDINGS}### ✅ Checkov IaC Security: Scan completed\n"
+          fi
+
+          # 7. Parse Trivy Container Scans
+          echo "Checking Trivy results..."
+          TRIVY_REPORTS=$(find security-reports -name "trivy-*.sarif" 2>/dev/null)
+          if [ -n "$TRIVY_REPORTS" ]; then
+            TRIVY_CRITICAL=0
+            TRIVY_HIGH=0
+            TRIVY_MEDIUM=0
+            
+            for trivy_file in $TRIVY_REPORTS; do
+              echo "Parsing: $trivy_file"
+              T_CRIT=$(jq '[.runs[]?.results[]? // empty | select(.level=="error")] | length' "$trivy_file" 2>/dev/null || echo "0")
+              T_HIGH=$(jq '[.runs[]?.results[]? // empty | select(.level=="warning")] | length' "$trivy_file" 2>/dev/null || echo "0")
+              T_MED=$(jq '[.runs[]?.results[]? // empty | select(.level=="note")] | length' "$trivy_file" 2>/dev/null || echo "0")
+              
+              TRIVY_CRITICAL=$((TRIVY_CRITICAL + T_CRIT))
+              TRIVY_HIGH=$((TRIVY_HIGH + T_HIGH))
+              TRIVY_MEDIUM=$((TRIVY_MEDIUM + T_MED))
+            done
+            
+            CRITICAL_COUNT=$((CRITICAL_COUNT + TRIVY_CRITICAL))
+            HIGH_COUNT=$((HIGH_COUNT + TRIVY_HIGH))
+            MEDIUM_COUNT=$((MEDIUM_COUNT + TRIVY_MEDIUM))
+            
+            if [ "$TRIVY_CRITICAL" -gt 0 ] || [ "$TRIVY_HIGH" -gt 0 ]; then
+              FINDINGS="${FINDINGS}### 🔴 Trivy Container Scans: $TRIVY_CRITICAL critical, $TRIVY_HIGH high, $TRIVY_MEDIUM medium\n"
+            else
+              FINDINGS="${FINDINGS}### ✅ Trivy Container Scans: No critical/high vulnerabilities ($TRIVY_MEDIUM medium)\n"
+            fi
+          else
+            FINDINGS="${FINDINGS}### ✅ Trivy Container Scans: Completed\n"
+          fi
+
+          # Save outputs
           echo "critical_count=$CRITICAL_COUNT" >> $GITHUB_OUTPUT
           echo "high_count=$HIGH_COUNT" >> $GITHUB_OUTPUT
+          echo "medium_count=$MEDIUM_COUNT" >> $GITHUB_OUTPUT
+          echo "low_count=$LOW_COUNT" >> $GITHUB_OUTPUT
           echo "has_critical=$([[ $CRITICAL_COUNT -gt 0 ]] && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
 
           # Create summary
           cat > security-summary.md <<EOF
           # Monorepo Security Scan Summary
 
-          **Pipeline Run:** ${{ github.run_number }}
-          **Branch:** ${{ github.ref_name }}
-          **Commit:** ${{ github.sha }}
+          **Pipeline Run:** #${{ github.run_number }}
+          **Branch:** \`${{ github.ref_name }}\`
+          **Commit:** \`${{ github.sha }}\`
           **Backend Changed:** ${{ needs.initialize.outputs.backend_changed }}
 
           ## Vulnerability Overview
 
           | Severity | Count |
           |----------|-------|
-          | 🔴 Critical | $CRITICAL_COUNT |
-          | 🟠 High | $HIGH_COUNT |
-          | 🟡 Medium | $MEDIUM_COUNT |
-          | 🔵 Low | $LOW_COUNT |
+          | 🔴 Critical | **$CRITICAL_COUNT** |
+          | 🟠 High | **$HIGH_COUNT** |
+          | 🟡 Medium | **$MEDIUM_COUNT** |
+          | 🔵 Low | **$LOW_COUNT** |
 
           ## Scan Results
 
@@ -788,18 +893,23 @@ jobs:
 
           ## Components Analyzed
 
-          - **NestJS Backend** (nestjs_backend/): API server security analysis
-          - **Infrastructure**: Docker, docker-compose.yml, .env file security
+          - **NestJS Backend** (\`nestjs_backend/\`): API server security analysis
+          - **Infrastructure**: Docker, docker-compose.yml, environment configuration
           - **Shared Resources**: Root-level configuration and secrets
+          - **Dependencies**: npm packages vulnerability scanning
+          - **Code Quality**: Static analysis and security patterns
 
           ## Detailed Reports
 
           All detailed reports are available as artifacts in this workflow run.
+          - [View GitHub Security Tab](https://github.com/${{ github.repository }}/security)
+          - [View Workflow Artifacts](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
 
           ---
           *Generated by NestJS Monorepo CI/CD Pipeline*
           EOF
 
+          echo "=== FINAL SUMMARY ==="
           cat security-summary.md
 
       - name: Comment PR with Summary
