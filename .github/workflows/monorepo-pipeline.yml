@@ -545,14 +545,14 @@ jobs:
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-fs-${{ matrix.service }}-results.sarif
-          category: trivy-${{ matrix.service }}-filesystem
+          category: trivy-${{ matrix.service }}-filesystem-${{ github.run_id }}
 
       - name: Upload Trivy SARIF to GitHub Security (${{ matrix.service }} - Image)
         if: always() && hashFiles('trivy-image-${{ matrix.service }}-results.sarif') != ''
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-image-${{ matrix.service }}-results.sarif
-          category: trivy-${{ matrix.service }}-container
+          category: trivy-${{ matrix.service }}-container-${{ github.run_id }}
 
       - name: Fail Job if Critical Vulnerabilities Found
         if: always() && steps.check-trivy.outputs.fail_reason != 'none'
