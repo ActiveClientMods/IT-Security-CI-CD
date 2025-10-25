@@ -82,7 +82,7 @@ jobs:
   # ==========================================
   # JOB 2: Secret Scanning with Gitleaks
   # ==========================================
-  # CRITICAL: Scans last commit for secrets
+  # CRITICAL: Scans last 2 commits for secrets
   gitleaks-scan:
     name: GitLeaks Secret Scanning
     runs-on: ubuntu-latest
@@ -95,7 +95,7 @@ jobs:
       - name: Checkout Code (Last 2 Commits)
         uses: actions/checkout@v5
         with:
-          fetch-depth: 1 # Scan last commit
+          fetch-depth: 2 # Scan last 2 commits
 
       - name: Run Gitleaks Scan
         uses: gitleaks/gitleaks-action@v2
