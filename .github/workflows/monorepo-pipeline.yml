@@ -542,13 +542,6 @@ jobs:
             echo "FAIL_REASON=none" >> $GITHUB_OUTPUT
           fi
 
-      - name: Upload Trivy Results (${{ matrix.service }})
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: trivy-${{ matrix.service }}-reports
-          path: trivy-*-${{ matrix.service }}-results.sarif
-
       - name: Upload Trivy SARIF to GitHub Security (${{ matrix.service }} - FS)
         if: always() && hashFiles('trivy-fs-${{ matrix.service }}-results.sarif') != ''
         uses: github/codeql-action/upload-sarif@v4
@@ -961,28 +954,26 @@ jobs:
           # 7. Parse Trivy Container Scans
           echo "Checking Trivy results..."
           TRIVY_REPORTS=$(find security-reports -type f -name "trivy-*.sarif" 2>/dev/null)
+          TRIVY_CRITICAL=0
+          TRIVY_HIGH=0
+          TRIVY_MEDIUM=0
+          TRIVY_FILES=""
           if [ -n "$TRIVY_REPORTS" ]; then
-            TRIVY_CRITICAL=0
-            TRIVY_HIGH=0
-            TRIVY_MEDIUM=0
-            
             for trivy_file in $TRIVY_REPORTS; do
               echo "Parsing: $trivy_file"
               T_CRIT=$(jq '[.runs[]?.results[]? // empty | select(.level=="error")] | length' "$trivy_file" 2>/dev/null || echo "0")
               T_HIGH=$(jq '[.runs[]?.results[]? // empty | select(.level=="warning")] | length' "$trivy_file" 2>/dev/null || echo "0")
               T_MED=$(jq '[.runs[]?.results[]? // empty | select(.level=="note")] | length' "$trivy_file" 2>/dev/null || echo "0")
-              
               TRIVY_CRITICAL=$((TRIVY_CRITICAL + T_CRIT))
               TRIVY_HIGH=$((TRIVY_HIGH + T_HIGH))
               TRIVY_MEDIUM=$((TRIVY_MEDIUM + T_MED))
+              TRIVY_FILES="$TRIVY_FILES\n- $trivy_file: $T_CRIT critical, $T_HIGH high, $T_MED medium"
             done
-            
             CRITICAL_COUNT=$((CRITICAL_COUNT + TRIVY_CRITICAL))
             HIGH_COUNT=$((HIGH_COUNT + TRIVY_HIGH))
             MEDIUM_COUNT=$((MEDIUM_COUNT + TRIVY_MEDIUM))
-            
             if [ "$TRIVY_CRITICAL" -gt 0 ] || [ "$TRIVY_HIGH" -gt 0 ]; then
-              FINDINGS="${FINDINGS}### 🔴 Trivy Container Scans: $TRIVY_CRITICAL critical, $TRIVY_HIGH high, $TRIVY_MEDIUM medium\n"
+              FINDINGS="${FINDINGS}### 🔴 Trivy Container Scans: $TRIVY_CRITICAL critical, $TRIVY_HIGH high, $TRIVY_MEDIUM medium\n${TRIVY_FILES}\n"
             else
               FINDINGS="${FINDINGS}### ✅ Trivy Container Scans: No critical/high vulnerabilities ($TRIVY_MEDIUM medium)\n"
             fi
