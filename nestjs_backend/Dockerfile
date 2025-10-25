@@ -1,11 +1,14 @@
+ARG NODE_VERSION = 25
+ARG ALPINE_VERSION = 3.21
+
 # ---------- Build Stage ----------
-FROM node:18.12.0-alpine AS builder
+FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS builder
 
 # Set working directory
 WORKDIR /app
 
 # Install pnpm (use corepack for security and version pinning)
-RUN corepack enable && corepack prepare pnpm@9.12.1 --activate
+RUN corepack enable && corepack prepare pnpm@10.19.0 --activate
 
 # Copy only package files first (leverage Docker layer caching)
 COPY package.json pnpm-lock.yaml ./
@@ -24,14 +27,14 @@ RUN pnpm prune --prod
 
 
 # ---------- Production Stage ----------
-FROM node:18.12.0-alpine
+FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION}
 
 # Set environment variables early
 ENV NODE_ENV=production \
     PORT=3000
 
 # Install pnpm (same version as in builder)
-RUN corepack enable && corepack prepare pnpm@9.12.1 --activate
+RUN corepack enable && corepack prepare pnpm@10.19.0 --activate
 
 # Create and use non-root user
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup

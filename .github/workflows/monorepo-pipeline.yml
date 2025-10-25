@@ -502,6 +502,91 @@ jobs:
           severity: "CRITICAL,HIGH,MEDIUM"
           scanners: "vuln,config"
 
+      - name: Check Trivy Results for Critical/High Vulnerabilities
+        id: check-trivy
+        if: always()
+        run: |
+          echo "Analyzing Trivy scan results..."
+
+          CRITICAL_COUNT=0
+          HIGH_COUNT=0
+
+          for trivy_file in trivy-*-${{ matrix.service }}-results.sarif; do
+            if [ -f "$trivy_file" ]; then
+              echo "Checking $trivy_file"
+              
+              CRIT=$(jq '[.runs[]?.results[]? // empty | select(.level=="error")] | length' "$trivy_file" 2>/dev/null || echo "0")
+              HIGH=$(jq '[.runs[]?.results[]? // empty | select(.level=="warning")] | length' "$trivy_file" 2>/dev/null || echo "0")
+              
+              CRITICAL_COUNT=$((CRITICAL_COUNT + CRIT))
+              HIGH_COUNT=$((HIGH_COUNT + HIGH))
+              
+              echo "File: $trivy_file - Critical: $CRIT, High: $HIGH"
+            fi
+          done
+
+          echo "Total vulnerabilities found:"
+          echo "  Critical: $CRITICAL_COUNT"
+          echo "  High: $HIGH_COUNT"
+
+          echo "critical_count=$CRITICAL_COUNT" >> $GITHUB_OUTPUT
+          echo "high_count=$HIGH_COUNT" >> $GITHUB_OUTPUT
+
+          if [ "$CRITICAL_COUNT" -gt 0 ]; then
+            echo "FAIL_REASON=critical" >> $GITHUB_OUTPUT
+            exit 0
+          elif [ "$HIGH_COUNT" -gt 10 ]; then
+            echo "FAIL_REASON=high" >> $GITHUB_OUTPUT
+            exit 0
+          else
+            echo "FAIL_REASON=none" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload Trivy Results (${{ matrix.service }})
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-${{ matrix.service }}-reports
+          path: trivy-*-${{ matrix.service }}-results.sarif
+
+      - name: Upload Trivy SARIF to GitHub Security (${{ matrix.service }} - FS)
+        if: always() && hashFiles('trivy-fs-${{ matrix.service }}-results.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-fs-${{ matrix.service }}-results.sarif
+          category: trivy-${{ matrix.service }}-filesystem
+
+      - name: Upload Trivy SARIF to GitHub Security (${{ matrix.service }} - Image)
+        if: always() && hashFiles('trivy-image-${{ matrix.service }}-results.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-image-${{ matrix.service }}-results.sarif
+          category: trivy-${{ matrix.service }}-container
+
+      - name: Fail Job if Critical Vulnerabilities Found
+        if: always() && steps.check-trivy.outputs.fail_reason != 'none'
+        run: |
+          echo "================================================"
+          echo "CRITICAL: Container Security Vulnerabilities Detected"
+          echo "================================================"
+
+          if [[ "${{ steps.check-trivy.outputs.fail_reason }}" == "critical" ]]; then
+            echo "Found ${{ steps.check-trivy.outputs.critical_count }} CRITICAL vulnerabilities"
+            echo "Action required: These must be fixed before deployment"
+          elif [[ "${{ steps.check-trivy.outputs.fail_reason }}" == "high" ]]; then
+            echo "Found ${{ steps.check-trivy.outputs.high_count }} HIGH vulnerabilities (threshold: 10)"
+            echo "Action required: Reduce high-severity vulnerabilities"
+          fi
+
+          echo ""
+          echo "Recommendations:"
+          echo "1. Update base image to latest version"
+          echo "2. Update vulnerable dependencies"
+          echo "3. Review Trivy reports in workflow artifacts"
+          echo "4. Check GitHub Security tab for details"
+
+          exit 1
+
       - name: Upload Trivy Results (${{ matrix.service }})
         if: always()
         uses: actions/upload-artifact@v4
@@ -913,13 +998,18 @@ jobs:
           echo "has_critical=$([[ $CRITICAL_COUNT -gt 0 ]] && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
 
           # Create summary with printf to avoid sed issues
+          BACKEND_CHANGED="${{ needs.initialize.outputs.backend_changed }}"
+          if [ -z "$BACKEND_CHANGED" ]; then
+            BACKEND_CHANGED="false"
+          fi
+
           cat > security-summary.md << 'EOFMARKER'
           # 🔒 Monorepo Security Scan Summary
 
           **Pipeline Run:** #${{ github.run_number }}
           **Branch:** `${{ github.ref_name }}`
           **Commit:** `${{ github.sha }}`
-          **Backend Changed:** ${{ needs.initialize.outputs.backend_changed }}
+          **Backend Changed:** BACKEND_CHANGED_PLACEHOLDER
 
           ## 📊 Vulnerability Overview
 
@@ -1127,58 +1217,7 @@ jobs:
         if: success()
         run: |
           echo "Pipeline completed successfully!"
-          echo "   - All security checks passed"
-          echo "   - Build and tests passed"
-          echo "   - Quality gate passed"
-          echo "   - Ready for deployment"🔴 Gitleaks: $GITLEAKS_COUNT secret(s) detected\n"
-              if [ -n "$GITLEAKS_DETAILS" ]; then
-                FINDINGS="${FINDINGS}**Details:** $GITLEAKS_DETAILS\n"
-              fi
-            else
-              FINDINGS="${FINDINGS}### ✅ Gitleaks: No secrets detected\n"
-            fi
-          else
-            echo "No Gitleaks SARIF found"
-            FINDINGS="${FINDINGS}### ⚠️ Gitleaks: Report not found\n"
-          fi
-
-          # 2. Parse Backend OWASP Dependency Check
-          echo "Checking OWASP Dependency Check results..."
-          OWASP_JSON=$(find security-reports -path "*/reports-json/dependency-check-report.json" 2>/dev/null | head -1)
-          if [ -n "$OWASP_JSON" ] && [ -f "$OWASP_JSON" ]; then
-            echo "Found OWASP JSON: $OWASP_JSON"
-            DEP_CRITICAL=$(jq '[.dependencies[]?.vulnerabilities[]? | select(.severity=="CRITICAL")] | length' "$OWASP_JSON" 2>/dev/null || echo "0")
-            DEP_HIGH=$(jq '[.dependencies[]?.vulnerabilities[]? | select(.severity=="HIGH")] | length' "$OWASP_JSON" 2>/dev/null || echo "0")
-            DEP_MEDIUM=$(jq '[.dependencies[]?.vulnerabilities[]? | select(.severity=="MEDIUM")] | length' "$OWASP_JSON" 2>/dev/null || echo "0")
-            
-            CRITICAL_COUNT=$((CRITICAL_COUNT + DEP_CRITICAL))
-            HIGH_COUNT=$((HIGH_COUNT + DEP_HIGH))
-            MEDIUM_COUNT=$((MEDIUM_COUNT + DEP_MEDIUM))
-            
-            if [ "$DEP_CRITICAL" -gt 0 ] || [ "$DEP_HIGH" -gt 0 ]; then
-              FINDINGS="${FINDINGS}### 🔴 Backend OWASP Dependency Check: $DEP_CRITICAL critical, $DEP_HIGH high, $DEP_MEDIUM medium\n"
-              
-              TOP_VULNS=$(jq -r '[.dependencies[]?.vulnerabilities[]? | select(.severity=="CRITICAL" or .severity=="HIGH")] | sort_by(.cvssv3.baseScore // 0) | reverse | limit(5; .[]) | "- **\(.name // .source.name)** (\(.severity), CVSS: \(.cvssv3.baseScore // "N/A"))"' "$OWASP_JSON" 2>/dev/null || echo "")
-              if [ -n "$TOP_VULNS" ]; then
-                FINDINGS="${FINDINGS}**Top Issues:**\n$TOP_VULNS\n"
-              fi
-            else
-              FINDINGS="${FINDINGS}### ✅ Backend OWASP Dependency Check: No critical/high vulnerabilities ($DEP_MEDIUM medium)\n"
-            fi
-          else
-            echo "No OWASP JSON found"
-            if [[ "${{ needs.backend-dependency-check.result }}" == "skipped" ]]; then
-              FINDINGS="${FINDINGS}### ⏭️ Backend OWASP Dependency Check: Skipped (no backend changes)\n"
-            else
-              FINDINGS="${FINDINGS}### ⚠️ Backend OWASP Dependency Check: Report not found\n"
-            fi
-          fi
-
-          # 3. Parse SonarCloud results
-          echo "Checking SonarCloud results..."
-          if [[ "${{ needs.sonarcloud.result }}" == "failure" ]]; then
-            FINDINGS="${FINDINGS}### 🟠 SonarCloud Quality Gate: FAILED\n"
-            FINDINGS="${FINDINGS}**Status:** Code quality issues detected. Check [SonarCloud Dashboard](https://sonarcloud.io/project/overview?id=ActiveClientMods_IT-Security-CI-CD)\n"
-            HIGH_COUNT=$((HIGH_COUNT + 1))
-          elif [[ "${{ needs.sonarcloud.result }}" == "success" ]]; then
-            FINDINGS="${FINDINGS}###
+          echo "- All security checks passed"
+          echo "- Build and tests passed"
+          echo "- Quality gate passed"
+          echo "- Ready for deployment"
