@@ -727,7 +727,58 @@ jobs:
             if [ "$GITLEAKS_COUNT" -gt 0 ]; then
               CRITICAL_COUNT=$((CRITICAL_COUNT + GITLEAKS_COUNT))
               GITLEAKS_DETAILS=$(jq -r '[.runs[]?.results[]? // empty] | group_by(.ruleId) | map("\(.length)x \(.[0].ruleId)") | join(", ")' "$GITLEAKS_SARIF" 2>/dev/null || echo "")
-              FINDINGS="${FINDINGS}### ✅ SonarCloud Quality Gate: PASSED\n"
+              FINDINGS="${FINDINGS}### 🔴 Gitleaks: $GITLEAKS_COUNT secret(s) detected\n"
+              if [ -n "$GITLEAKS_DETAILS" ]; then
+                FINDINGS="${FINDINGS}**Details:** $GITLEAKS_DETAILS\n"
+              fi
+            else
+              FINDINGS="${FINDINGS}### ✅ Gitleaks: No secrets detected\n"
+            fi
+          else
+            echo "No Gitleaks SARIF found"
+            FINDINGS="${FINDINGS}### ⚠️ Gitleaks: Report not found\n"
+          fi
+
+          # 2. Parse Backend OWASP Dependency Check
+          echo "Checking OWASP Dependency Check results..."
+          OWASP_JSON=$(find security-reports -path "*/reports-json/dependency-check-report.json" 2>/dev/null | head -1)
+          if [ -n "$OWASP_JSON" ] && [ -f "$OWASP_JSON" ]; then
+            echo "Found OWASP JSON: $OWASP_JSON"
+            DEP_CRITICAL=$(jq '[.dependencies[]?.vulnerabilities[]? | select(.severity=="CRITICAL")] | length' "$OWASP_JSON" 2>/dev/null || echo "0")
+            DEP_HIGH=$(jq '[.dependencies[]?.vulnerabilities[]? | select(.severity=="HIGH")] | length' "$OWASP_JSON" 2>/dev/null || echo "0")
+            DEP_MEDIUM=$(jq '[.dependencies[]?.vulnerabilities[]? | select(.severity=="MEDIUM")] | length' "$OWASP_JSON" 2>/dev/null || echo "0")
+            
+            CRITICAL_COUNT=$((CRITICAL_COUNT + DEP_CRITICAL))
+            HIGH_COUNT=$((HIGH_COUNT + DEP_HIGH))
+            MEDIUM_COUNT=$((MEDIUM_COUNT + DEP_MEDIUM))
+            
+            if [ "$DEP_CRITICAL" -gt 0 ] || [ "$DEP_HIGH" -gt 0 ]; then
+              FINDINGS="${FINDINGS}### 🔴 Backend OWASP Dependency Check: $DEP_CRITICAL critical, $DEP_HIGH high, $DEP_MEDIUM medium\n"
+              
+              TOP_VULNS=$(jq -r '[.dependencies[]?.vulnerabilities[]? | select(.severity=="CRITICAL" or .severity=="HIGH")] | sort_by(.cvssv3.baseScore // 0) | reverse | limit(5; .[]) | "- **\(.name // .source.name)** (\(.severity), CVSS: \(.cvssv3.baseScore // "N/A"))"' "$OWASP_JSON" 2>/dev/null || echo "")
+              if [ -n "$TOP_VULNS" ]; then
+                FINDINGS="${FINDINGS}**Top Issues:**\n$TOP_VULNS\n"
+              fi
+            else
+              FINDINGS="${FINDINGS}### ✅ Backend OWASP Dependency Check: No critical/high vulnerabilities ($DEP_MEDIUM medium)\n"
+            fi
+          else
+            echo "No OWASP JSON found"
+            if [[ "${{ needs.backend-dependency-check.result }}" == "skipped" ]]; then
+              FINDINGS="${FINDINGS}### ⏭️ Backend OWASP Dependency Check: Skipped (no backend changes)\n"
+            else
+              FINDINGS="${FINDINGS}### ⚠️ Backend OWASP Dependency Check: Report not found\n"
+            fi
+          fi
+
+          # 3. Parse SonarCloud results
+          echo "Checking SonarCloud results..."
+          if [[ "${{ needs.sonarcloud.result }}" == "failure" ]]; then
+            FINDINGS="${FINDINGS}### 🟠 SonarCloud Quality Gate: FAILED\n"
+            FINDINGS="${FINDINGS}**Status:** Code quality issues detected. Check [SonarCloud Dashboard](https://sonarcloud.io/project/overview?id=ActiveClientMods_IT-Security-CI-CD)\n"
+            HIGH_COUNT=$((HIGH_COUNT + 1))
+          elif [[ "${{ needs.sonarcloud.result }}" == "success" ]]; then
+            FINDINGS="${FINDINGS}### ✅ SonarCloud Quality Gate: PASSED\n"
           elif [[ "${{ needs.sonarcloud.result }}" == "skipped" ]]; then
             FINDINGS="${FINDINGS}### ⏭️ SonarCloud Quality Gate: Skipped\n"
           fi
@@ -1057,7 +1108,7 @@ jobs:
       - name: Pipeline Success
         if: success()
         run: |
-          echo "✅ NestJS Monorepo pipeline completed successfully!"
+          echo "Pipeline completed successfully!"
           echo "   - All security checks passed"
           echo "   - Build and tests passed"
           echo "   - Quality gate passed"
