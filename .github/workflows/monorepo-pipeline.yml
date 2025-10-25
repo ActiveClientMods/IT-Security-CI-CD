@@ -996,7 +996,6 @@ jobs:
 
           # Create summary with printf to avoid sed issues
           BACKEND_CHANGED="${{ needs.initialize.outputs.backend_changed }}"
-          echo "[DEBUG] BACKEND_CHANGED value: $BACKEND_CHANGED"
           if [ -z "$BACKEND_CHANGED" ]; then
             BACKEND_CHANGED="false"
           fi
