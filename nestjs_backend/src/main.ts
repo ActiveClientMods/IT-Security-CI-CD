@@ -7,6 +7,7 @@ export async function bootstrap() {
 
   // // Vulnerability 1: Hard-coded API KEY
   // const AWS_SECRET_KEY = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+  // test
 
   const port = process.env.PORT ?? 3000;
   const app = await NestFactory.create(AppModule);
