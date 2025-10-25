@@ -559,11 +559,15 @@ jobs:
           echo "CRITICAL: Container Security Vulnerabilities Detected"
           echo "================================================"
 
-          if [[ "${{ steps.check-trivy.outputs.fail_reason }}" == "critical" ]]; then
-            echo "Found ${{ steps.check-trivy.outputs.critical_count }} CRITICAL vulnerabilities"
+          FAIL_REASON="${{ steps.check-trivy.outputs.fail_reason }}"
+          CRITICAL_COUNT="${{ steps.check-trivy.outputs.critical_count }}"
+          HIGH_COUNT="${{ steps.check-trivy.outputs.high_count }}"
+
+          if [[ "$FAIL_REASON" == "critical" ]]; then
+            echo "Found $CRITICAL_COUNT CRITICAL vulnerabilities"
             echo "Action required: These must be fixed before deployment"
-          elif [[ "${{ steps.check-trivy.outputs.fail_reason }}" == "high" ]]; then
-            echo "Found ${{ steps.check-trivy.outputs.high_count }} HIGH vulnerabilities (threshold: 10)"
+          elif [[ "$FAIL_REASON" == "high" ]]; then
+            echo "Found $HIGH_COUNT HIGH vulnerabilities (threshold: 10)"
             echo "Action required: Reduce high-severity vulnerabilities"
           fi
 
