@@ -510,17 +510,15 @@ jobs:
 
           CRITICAL_COUNT=0
           HIGH_COUNT=0
+          HIGH_THRESHOLD=10  # Set your threshold here
 
           for trivy_file in trivy-*-${{ matrix.service }}-results.sarif; do
             if [ -f "$trivy_file" ]; then
               echo "Checking $trivy_file"
-              
               CRIT=$(jq '[.runs[]?.results[]? // empty | select(.level=="error")] | length' "$trivy_file" 2>/dev/null || echo "0")
               HIGH=$(jq '[.runs[]?.results[]? // empty | select(.level=="warning")] | length' "$trivy_file" 2>/dev/null || echo "0")
-              
               CRITICAL_COUNT=$((CRITICAL_COUNT + CRIT))
               HIGH_COUNT=$((HIGH_COUNT + HIGH))
-              
               echo "File: $trivy_file - Critical: $CRIT, High: $HIGH"
             fi
           done
@@ -534,10 +532,8 @@ jobs:
 
           if [ "$CRITICAL_COUNT" -gt 0 ]; then
             echo "FAIL_REASON=critical" >> $GITHUB_OUTPUT
-            exit 0
-          elif [ "$HIGH_COUNT" -gt 10 ]; then
+          elif [ "$HIGH_COUNT" -gt "$HIGH_THRESHOLD" ]; then
             echo "FAIL_REASON=high" >> $GITHUB_OUTPUT
-            exit 0
           else
             echo "FAIL_REASON=none" >> $GITHUB_OUTPUT
           fi
@@ -1130,7 +1126,16 @@ jobs:
   quality-gate:
     name: Final Quality Gate
     runs-on: ubuntu-latest
-    needs: [gitleaks-scan, backend-dependency-check, security-summary, build-and-test-backend, sonarcloud, integration-test]
+    needs:
+      [
+        gitleaks-scan,
+        backend-dependency-check,
+        security-summary,
+        build-and-test-backend,
+        sonarcloud,
+        integration-test,
+        docker-build-scan,
+      ]
     if: always()
     steps:
       - name: Check All Jobs Status
@@ -1144,6 +1149,7 @@ jobs:
           echo "  Gitleaks:            ${{ needs.gitleaks-scan.result }}"
           echo "  OWASP Dependency:    ${{ needs.backend-dependency-check.result }}"
           echo "  Build & Test:        ${{ needs.build-and-test-backend.result }}"
+          echo "  Docker/Trivy Scan:   ${{ needs.docker-build-scan.result }}"
           echo "  SonarCloud:          ${{ needs.sonarcloud.result }}"
           echo "  Integration Test:    ${{ needs.integration-test.result }}"
           echo "  Security Summary:    ${{ needs.security-summary.result }}"
@@ -1174,6 +1180,15 @@ jobs:
             echo "⏭️  Build & Test skipped (no backend changes)"
           else
             echo "✅ Build & Test passed"
+          fi
+
+          if [[ "${{ needs.docker-build-scan.result }}" == "failure" ]]; then
+            echo "❌ CRITICAL: Docker/Trivy scan failed - container vulnerabilities detected!"
+            CRITICAL_FAILED=1
+          elif [[ "${{ needs.docker-build-scan.result }}" == "skipped" ]]; then
+            echo "⏭️  Docker/Trivy scan skipped"
+          else
+            echo "✅ Docker/Trivy scan passed"
           fi
 
           if [[ "${{ needs.integration-test.result }}" == "failure" ]]; then
