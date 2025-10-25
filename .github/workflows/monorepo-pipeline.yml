@@ -716,11 +716,15 @@ jobs:
           FINDINGS=""
 
           echo "=== Scanning for artifacts ==="
-          find security-reports -type f -name "*.sarif" -o -name "*.json" 2>/dev/null || echo "No reports found"
+          find security-reports -type f \( -name "*.sarif" -o -name "*.json" \) 2>/dev/null || echo "No reports found"
 
           # 1. Parse Gitleaks SARIF
           echo "Checking Gitleaks results..."
-          GITLEAKS_SARIF=$(find security-reports -name "results.sarif" -o -name "gitleaks*.sarif" 2>/dev/null | head -1)
+          GITLEAKS_SARIF=$(find security-reports -type f -name "results.sarif" 2>/dev/null | grep -i gitleaks | head -1)
+          if [ -z "$GITLEAKS_SARIF" ]; then
+            GITLEAKS_SARIF=$(find security-reports -type f -name "*.sarif" 2>/dev/null | grep -i gitleaks | head -1)
+          fi
+
           if [ -n "$GITLEAKS_SARIF" ] && [ -f "$GITLEAKS_SARIF" ]; then
             echo "Found Gitleaks SARIF: $GITLEAKS_SARIF"
             GITLEAKS_COUNT=$(jq '[.runs[]?.results[]? // empty] | length' "$GITLEAKS_SARIF" 2>/dev/null || echo "0")
@@ -741,7 +745,7 @@ jobs:
 
           # 2. Parse Backend OWASP Dependency Check
           echo "Checking OWASP Dependency Check results..."
-          OWASP_JSON=$(find security-reports -path "*/reports-json/dependency-check-report.json" 2>/dev/null | head -1)
+          OWASP_JSON=$(find security-reports -type f -name "dependency-check-report.json" 2>/dev/null | head -1)
           if [ -n "$OWASP_JSON" ] && [ -f "$OWASP_JSON" ]; then
             echo "Found OWASP JSON: $OWASP_JSON"
             DEP_CRITICAL=$(jq '[.dependencies[]?.vulnerabilities[]? | select(.severity=="CRITICAL")] | length' "$OWASP_JSON" 2>/dev/null || echo "0")
@@ -775,7 +779,7 @@ jobs:
           echo "Checking SonarCloud results..."
           if [[ "${{ needs.sonarcloud.result }}" == "failure" ]]; then
             FINDINGS="${FINDINGS}### 🟠 SonarCloud Quality Gate: FAILED\n"
-            FINDINGS="${FINDINGS}**Status:** Code quality issues detected. Check [SonarCloud Dashboard](https://sonarcloud.io/project/overview?id=ActiveClientMods_IT-Security-CI-CD)\n"
+            FINDINGS="${FINDINGS}**Status:** Code quality issues detected. Check SonarCloud Dashboard\n"
             HIGH_COUNT=$((HIGH_COUNT + 1))
           elif [[ "${{ needs.sonarcloud.result }}" == "success" ]]; then
             FINDINGS="${FINDINGS}### ✅ SonarCloud Quality Gate: PASSED\n"
@@ -796,9 +800,14 @@ jobs:
 
           # 5. License compliance check
           echo "Checking license compliance..."
-          LICENSE_SUMMARY=$(find security-reports -name "license-summary.txt" 2>/dev/null | head -1)
+          LICENSE_SUMMARY=$(find security-reports -type f -name "license-summary.txt" 2>/dev/null | head -1)
           if [ -n "$LICENSE_SUMMARY" ] && [ -f "$LICENSE_SUMMARY" ]; then
-            UNLICENSED=$(grep -c "UNLICENSED" "$LICENSE_SUMMARY" 2>/dev/null || echo "0")
+            UNLICENSED=$(grep -c "UNLICENSED" "$LICENSE_SUMMARY" 2>/dev/null | tr -d '\n' || echo "0")
+            # Ensure UNLICENSED is a valid number
+            if ! [[ "$UNLICENSED" =~ ^[0-9]+$ ]]; then
+              UNLICENSED=0
+            fi
+            
             if [ "$UNLICENSED" -gt 0 ]; then
               FINDINGS="${FINDINGS}### ⚠️ License Compliance: $UNLICENSED packages without licenses\n"
             else
@@ -810,10 +819,7 @@ jobs:
 
           # 6. Parse Checkov IaC scan
           echo "Checking Checkov results..."
-          CHECKOV_JSON=$(find security-reports -path "*/checkov-output/results_json.json" -o -name "results_json.json" 2>/dev/null | head -1)
-          if [ -z "$CHECKOV_JSON" ]; then
-            CHECKOV_JSON=$(find security-reports -name "*json.json" -path "*/checkov*" 2>/dev/null | head -1)
-          fi
+          CHECKOV_JSON=$(find security-reports -type f -name "results_json.json" 2>/dev/null | grep -i checkov | head -1)
 
           if [ -n "$CHECKOV_JSON" ] && [ -f "$CHECKOV_JSON" ]; then
             echo "Found Checkov JSON: $CHECKOV_JSON"
@@ -823,17 +829,25 @@ jobs:
             CHECKOV_DETAILS=""
             
             for check_type in dockerfile terraform kubernetes github_actions; do
-              TYPE_FAILED=$(jq -r "select(.check_type==\"$check_type\") | .summary.failed // 0" "$CHECKOV_JSON" 2>/dev/null || echo "0")
-              TYPE_PASSED=$(jq -r "select(.check_type==\"$check_type\") | .summary.passed // 0" "$CHECKOV_JSON" 2>/dev/null || echo "0")
+              TYPE_FAILED=$(jq -r "select(.check_type==\"$check_type\") | .summary.failed // 0" "$CHECKOV_JSON" 2>/dev/null | head -1)
+              TYPE_PASSED=$(jq -r "select(.check_type==\"$check_type\") | .summary.passed // 0" "$CHECKOV_JSON" 2>/dev/null | head -1)
               
-              if [ "$TYPE_FAILED" != "0" ] || [ "$TYPE_PASSED" != "0" ]; then
+              # Ensure we have valid numbers
+              if ! [[ "$TYPE_FAILED" =~ ^[0-9]+$ ]]; then
+                TYPE_FAILED=0
+              fi
+              if ! [[ "$TYPE_PASSED" =~ ^[0-9]+$ ]]; then
+                TYPE_PASSED=0
+              fi
+              
+              if [ "$TYPE_FAILED" -gt 0 ] || [ "$TYPE_PASSED" -gt 0 ]; then
                 CHECKOV_FAILED=$((CHECKOV_FAILED + TYPE_FAILED))
                 CHECKOV_PASSED=$((CHECKOV_PASSED + TYPE_PASSED))
                 
                 if [ "$TYPE_FAILED" -gt 0 ]; then
-                  FAILED_CHECKS=$(jq -r "select(.check_type==\"$check_type\") | .results.failed_checks[]? | \"- **\(.check_name)** (\(.check_id)) in \(.file_path)\"" "$CHECKOV_JSON" 2>/dev/null | head -5)
+                  FAILED_CHECKS=$(jq -r "select(.check_type==\"$check_type\") | .results.failed_checks[]? | \"- \(.check_name) (\(.check_id)) in \(.file_path)\"" "$CHECKOV_JSON" 2>/dev/null | head -5)
                   if [ -n "$FAILED_CHECKS" ]; then
-                    CHECKOV_DETAILS="${CHECKOV_DETAILS}\n**${check_type} issues:**\n${FAILED_CHECKS}\n"
+                    CHECKOV_DETAILS="${CHECKOV_DETAILS}\n${check_type} issues:\n${FAILED_CHECKS}\n"
                   fi
                 fi
               fi
@@ -861,7 +875,7 @@ jobs:
 
           # 7. Parse Trivy Container Scans
           echo "Checking Trivy results..."
-          TRIVY_REPORTS=$(find security-reports -name "trivy-*.sarif" 2>/dev/null)
+          TRIVY_REPORTS=$(find security-reports -type f -name "trivy-*.sarif" 2>/dev/null)
           if [ -n "$TRIVY_REPORTS" ]; then
             TRIVY_CRITICAL=0
             TRIVY_HIGH=0
@@ -898,8 +912,8 @@ jobs:
           echo "low_count=$LOW_COUNT" >> $GITHUB_OUTPUT
           echo "has_critical=$([[ $CRITICAL_COUNT -gt 0 ]] && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
 
-          # Create summary
-          cat > security-summary.md << 'EOF'
+          # Create summary with printf to avoid sed issues
+          cat > security-summary.md << 'EOFMARKER'
           # 🔒 Monorepo Security Scan Summary
 
           **Pipeline Run:** #${{ github.run_number }}
@@ -911,10 +925,10 @@ jobs:
 
           | Severity | Count |
           |----------|-------|
-          | 🔴 Critical | **CRITICAL_COUNT_PLACEHOLDER** |
-          | 🟠 High | **HIGH_COUNT_PLACEHOLDER** |
-          | 🟡 Medium | **MEDIUM_COUNT_PLACEHOLDER** |
-          | 🔵 Low | **LOW_COUNT_PLACEHOLDER** |
+          | 🔴 Critical | CRITICAL_COUNT_PLACEHOLDER |
+          | 🟠 High | HIGH_COUNT_PLACEHOLDER |
+          | 🟡 Medium | MEDIUM_COUNT_PLACEHOLDER |
+          | 🔵 Low | LOW_COUNT_PLACEHOLDER |
 
           ## 🔍 Scan Results
 
@@ -936,14 +950,18 @@ jobs:
 
           ---
           *Generated by NestJS Monorepo CI/CD Pipeline*
-          EOF
+          EOFMARKER
 
-          # Replace placeholders with actual values
-          sed -i "s/CRITICAL_COUNT_PLACEHOLDER/$CRITICAL_COUNT/g" security-summary.md
-          sed -i "s/HIGH_COUNT_PLACEHOLDER/$HIGH_COUNT/g" security-summary.md
-          sed -i "s/MEDIUM_COUNT_PLACEHOLDER/$MEDIUM_COUNT/g" security-summary.md
-          sed -i "s/LOW_COUNT_PLACEHOLDER/$LOW_COUNT/g" security-summary.md
-          sed -i "s|FINDINGS_PLACEHOLDER|$(echo -e "$FINDINGS")|g" security-summary.md
+          # Replace placeholders using perl instead of sed to handle special characters
+          perl -i -pe "s/CRITICAL_COUNT_PLACEHOLDER/$CRITICAL_COUNT/g" security-summary.md
+          perl -i -pe "s/HIGH_COUNT_PLACEHOLDER/$HIGH_COUNT/g" security-summary.md
+          perl -i -pe "s/MEDIUM_COUNT_PLACEHOLDER/$MEDIUM_COUNT/g" security-summary.md
+          perl -i -pe "s/LOW_COUNT_PLACEHOLDER/$LOW_COUNT/g" security-summary.md
+
+          # Write findings to a temporary file and insert it
+          printf "%b" "$FINDINGS" > findings.tmp
+          perl -i -pe 'BEGIN{undef $/;} s/FINDINGS_PLACEHOLDER/`cat findings.tmp`/e' security-summary.md
+          rm -f findings.tmp
 
           echo "=== FINAL SUMMARY ==="
           cat security-summary.md
