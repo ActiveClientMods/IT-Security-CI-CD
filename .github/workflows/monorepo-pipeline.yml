@@ -369,21 +369,16 @@ jobs:
 
       - name: SonarCloud Scan
         id: sonar-scan
-        continue-on-error: true
         uses: SonarSource/sonarqube-scan-action@master
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        # Remove continue-on-error to properly fail the job
 
       - name: Check Quality Gate
-        if: always()
+        if: success()
         run: |
-          if [[ "${{ steps.sonar-scan.outcome }}" == "failure" ]]; then
-            echo "⚠️ SonarCloud Quality Gate failed - Check SonarCloud dashboard"
-            echo "This won't block the pipeline, but please review the issues"
-          else
-            echo "✅ SonarCloud Quality Gate passed"
-          fi
+          echo "✅ SonarCloud Quality Gate passed"
 
   # ==========================================
   # JOB 7: IaC Scanning with Checkov

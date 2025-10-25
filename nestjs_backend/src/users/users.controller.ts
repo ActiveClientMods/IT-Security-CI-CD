@@ -96,22 +96,4 @@ export class UsersController {
       );
     }
   }
-
-  /**
-   * Vulnerable endpoint: Get users by role
-   * Example: GET /users/role/admin
-   * Attack: GET /users/role/admin' OR '1'='1
-   */
-  @Get("role/:role")
-  async findByRole(@Param("role") role: string): Promise<User[]> {
-    try {
-      // This calls another vulnerable service method
-      return await this.usersService.findUsersByRole(role);
-    } catch {
-      throw new HttpException(
-        "Error finding users by role",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
-  }
 }

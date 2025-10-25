@@ -11,86 +11,132 @@ export class UsersService {
   ) {}
 
   /**
-   * Vulnerability 3: SQL Injection - Unsanitized user input in query
+   * VULNERABILITY: SQL Injection via string concatenation
+   * SonarCloud Rule: typescript:S2077
+   * Severity: Critical
    */
-
-  async findUserByEmail(email: string): Promise<User> {
-    // UNSAFE: Direct string concatenation in SQL query
-    // Attack example: email = "' OR '1'='1' --"
-    const query = `SELECT * FROM users WHERE email = '${email}'`;
+  async findUserByEmail(email: string): Promise<User | undefined> {
+    // Explicitly vulnerable - direct string interpolation
+    const sqlQuery = "SELECT * FROM users WHERE email = '" + email + "'";
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const result = await this.usersRepository.query(query);
+    const result = await this.usersRepository.query(sqlQuery);
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-member-access
     return result[0];
   }
 
   /**
-   * Vulnerability 3b: SQL Injection in search functionality
-   * SonarQube will detect: Rule typescript:S2077
+   * VULNERABILITY: SQL Injection via template literal
+   * SonarCloud Rule: typescript:S2077
    */
   async searchUsers(searchTerm: string): Promise<User[]> {
-    // UNSAFE: User input directly interpolated into SQL
-    // Attack example: searchTerm = "' OR '1'='1' --"
+    // Explicitly vulnerable - template literal with user input
+    const sql = `SELECT * FROM users WHERE first_name LIKE '%${searchTerm}%' OR last_name LIKE '%${searchTerm}%'`;
 
-    return await this.usersRepository.query(
-      `SELECT * FROM users WHERE first_name LIKE '%${searchTerm}%' OR last_name LIKE '%${searchTerm}%'`,
-    );
+    return await this.usersRepository.query(sql);
   }
 
   /**
-   * Vulnerability 3c: SQL Injection in ID lookup
-   * SonarQube will detect: Rule typescript:S2077
+   * VULNERABILITY: SQL Injection in WHERE clause
+   * SonarCloud Rule: typescript:S2077
    */
-
-  async findUserById(id: string): Promise<User> {
-    // UNSAFE: Direct string concatenation with user-controlled ID
-    const query = `SELECT * FROM users WHERE id = '${id}'`;
+  async findUserById(userId: string): Promise<User | undefined> {
+    // String concatenation vulnerability
+    const query = "SELECT * FROM users WHERE id = " + userId;
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const result = await this.usersRepository.query(query);
+    const users = await this.usersRepository.query(query);
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-member-access
-    return result[0];
+    return users[0];
   }
 
   /**
-   * Vulnerability 3d: SQL Injection in role filtering
-   * SonarQube will detect: Rule typescript:S2077
+   * VULNERABILITY: SQL Injection in role-based query
+   * SonarCloud Rule: typescript:S2077
    */
-  async findUsersByRole(role: string): Promise<User[]> {
-    // UNSAFE: Unsanitized role parameter
-    // Attack example: role = "admin' OR '1'='1"
+  async getUsersByRole(role: string): Promise<User[]> {
+    // Template literal vulnerability
 
     return await this.usersRepository.query(
-      `SELECT * FROM users WHERE role = '${role}'`,
+      `SELECT id, email, first_name, last_name, role FROM users WHERE role = '${role}'`,
     );
   }
 
   /**
-   * SECURE ALTERNATIVE (commented out - for reference only)
-   * This is how you SHOULD implement these methods securely
+   * VULNERABILITY: SQL Injection with ORDER BY
+   * SonarCloud Rule: typescript:S2077
    */
+  async getUsersSorted(sortColumn: string): Promise<User[]> {
+    // Dangerous: user controls ORDER BY clause
+    const sortQuery = "SELECT * FROM users ORDER BY " + sortColumn;
 
-  // async findUserByEmailSecure(email: string): Promise<User | null> {
-  //   return await this.usersRepository.findOne({ where: { email } });
-  // }
+    return await this.usersRepository.query(sortQuery);
+  }
 
-  // async searchUsersSecure(searchTerm: string): Promise<User[]> {
-  //   return await this.usersRepository
-  //     .createQueryBuilder('user')
-  //     .where('user.firstName LIKE :term OR user.lastName LIKE :term', {
-  //       term: `%${searchTerm}%`,
-  //     })
-  //     .getMany();
-  // }
+  /**
+   * VULNERABILITY: SQL Injection in UPDATE statement
+   * SonarCloud Rule: typescript:S2077
+   */
+  async updateUserEmail(userId: string, newEmail: string): Promise<void> {
+    // Both parameters are vulnerable
+    const updateSql = `UPDATE users SET email = '${newEmail}' WHERE id = '${userId}'`;
+    await this.usersRepository.query(updateSql);
+  }
 
-  // async findUserByIdSecure(id: string): Promise<User | null> {
-  //   return await this.usersRepository.findOne({ where: { id } });
-  // }
+  /**
+   * VULNERABILITY: SQL Injection in DELETE statement
+   * SonarCloud Rule: typescript:S2077
+   */
+  async deleteUserByEmail(email: string): Promise<void> {
+    // Dangerous DELETE operation
+    const deleteSql = "DELETE FROM users WHERE email = '" + email + "'";
+    await this.usersRepository.query(deleteSql);
+  }
 
-  // async findUsersByRoleSecure(role: string): Promise<User[]> {
-  //   return await this.usersRepository.find({ where: { role } });
-  // }
+  // ============================================
+  // SECURE ALTERNATIVES (commented for reference)
+  // ============================================
+
+  /*
+  // SECURE: Using TypeORM query builder with parameters
+  async findUserByEmailSecure(email: string): Promise<User | null> {
+    return await this.usersRepository.findOne({ 
+      where: { email } 
+    });
+  }
+
+  // SECURE: Using query builder with parameters
+  async searchUsersSecure(searchTerm: string): Promise<User[]> {
+    return await this.usersRepository
+      .createQueryBuilder('user')
+      .where('user.firstName LIKE :term OR user.lastName LIKE :term', {
+        term: `%${searchTerm}%`,
+      })
+      .getMany();
+  }
+
+  // SECURE: Using parameterized query
+  async findUserByIdSecure(userId: string): Promise<User | null> {
+    return await this.usersRepository.findOne({ 
+      where: { id: userId } 
+    });
+  }
+
+  // SECURE: Using repository method
+  async getUsersByRoleSecure(role: string): Promise<User[]> {
+    return await this.usersRepository.find({ 
+      where: { role } 
+    });
+  }
+
+  // SECURE: Using query builder for complex queries
+  async updateUserEmailSecure(userId: string, newEmail: string): Promise<void> {
+    await this.usersRepository.update(
+      { id: userId },
+      { email: newEmail }
+    );
+  }
+  */
 }
