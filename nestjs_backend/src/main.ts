@@ -16,4 +16,3 @@ export async function bootstrap() {
 }
 
 bootstrap().catch(err => console.error(err));
-// simulating changes
