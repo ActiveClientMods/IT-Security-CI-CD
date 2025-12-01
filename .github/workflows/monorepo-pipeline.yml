@@ -38,12 +38,12 @@ jobs:
       any_changed: ${{ steps.changes.outputs.any == 'true' && 'true' || 'false' }}
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Detect Changes
-        uses: dorny/paths-filter@v2
+        uses: dorny/paths-filter@v3
         id: changes
         with:
           filters: |
@@ -92,7 +92,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout Code (Last 3 Commits)
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 3
 
@@ -122,7 +122,7 @@ jobs:
         working-directory: ./nestjs_backend
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Create Reports Directory
         run: mkdir -p reports
@@ -161,7 +161,7 @@ jobs:
 
       - name: Upload Backend Dependency Check Results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: backend-dependency-check-report
           path: |
@@ -210,7 +210,7 @@ jobs:
         language: ["typescript"]
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
@@ -240,7 +240,7 @@ jobs:
         working-directory: ./nestjs_backend
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm
@@ -317,21 +317,21 @@ jobs:
           echo "Build artifacts will be used by subsequent jobs"
 
       - name: Upload Backend Build Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: backend-build-artifacts
           path: nestjs_backend/dist/
 
       - name: Upload Deprecated Packages Report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: backend-deprecated-packages
           path: nestjs_backend/deprecated-packages.txt
 
       - name: Upload License Compliance Reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: backend-license-compliance
           path: |
@@ -349,12 +349,12 @@ jobs:
     if: needs.build-and-test-backend.result == 'success' && needs.integration-test.result == 'success'
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Download Test Coverage Reports
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: complete-test-suite-coverage
           path: nestjs_backend/coverage/
@@ -385,7 +385,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Create Checkov Output Directory
         run: mkdir -p checkov-output
@@ -413,7 +413,7 @@ jobs:
 
       - name: Upload Checkov Results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: checkov-report
           path: |
@@ -452,11 +452,11 @@ jobs:
             artifacts: backend-build-artifacts
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Download Build Artifacts (${{ matrix.service }})
         if: matrix.artifacts != ''
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: ${{ matrix.artifacts }}
           path: nestjs_backend/dist
@@ -472,7 +472,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build Docker Image (${{ matrix.service }})
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
@@ -584,7 +584,7 @@ jobs:
 
       - name: Upload Trivy Results (${{ matrix.service }})
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: trivy-${{ matrix.service }}-reports
           path: trivy-*-${{ matrix.service }}-results.sarif
@@ -613,10 +613,10 @@ jobs:
     if: needs.docker-build-scan.result == 'success'
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Download Backend Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: backend-build-artifacts
           path: nestjs_backend/dist/
@@ -722,14 +722,14 @@ jobs:
 
       - name: Upload Test Coverage Reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: complete-test-suite-coverage
           path: nestjs_backend/coverage/
 
       - name: Upload Test Results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: complete-test-suite-results
           path: |
@@ -753,7 +753,7 @@ jobs:
 
       - name: Upload Docker Environment Logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: docker-compose-logs
           path: docker-compose-logs.txt
@@ -781,10 +781,10 @@ jobs:
       pull-requests: write
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Download All Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           path: security-reports/
 
@@ -1057,7 +1057,7 @@ jobs:
 
       - name: Comment PR with Summary
         if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -1093,7 +1093,7 @@ jobs:
 
       - name: Create Issue for Critical Findings
         if: steps.parse-results.outputs.has_critical == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -1124,7 +1124,7 @@ jobs:
 
       - name: Upload Security Summary
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: security-summary
           path: security-summary.md
